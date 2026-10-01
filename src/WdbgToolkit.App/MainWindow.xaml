@@ -90,8 +90,7 @@
             </Grid>
         </Border>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <Grid Margin="36,30,36,36">
+        <Grid Grid.Row="1" Margin="36,30,36,36">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="1.15*" />
                     <ColumnDefinition Width="24" />
@@ -117,18 +116,24 @@
                                FontSize="14" />
                 </StackPanel>
 
-                <StackPanel Grid.Row="2" Grid.Column="0">
-                    <TextBlock Text="SCENARIOS"
+                <Grid Grid.Row="2" Grid.Column="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0"
+                               Text="SCENARIOS"
                                Margin="0,0,0,12"
                                Style="{StaticResource SectionLabel}" />
-                    <ListBox x:Name="ScenarioList"
+                    <ListBox Grid.Row="1"
+                             x:Name="ScenarioList"
                              ItemsSource="{Binding}"
                              SelectedIndex="0"
                              SelectionChanged="ScenarioList_SelectionChanged"
                              Background="Transparent"
                              BorderThickness="0"
-                             ItemContainerStyle="{StaticResource ScenarioItem}"
-                             ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                             Padding="0,0,6,0"
+                             ItemContainerStyle="{StaticResource ScenarioItem}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid>
@@ -172,7 +177,7 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                </StackPanel>
+                </Grid>
 
                 <Border Grid.Row="2"
                         Grid.Column="2"
@@ -181,6 +186,7 @@
                         BorderBrush="{StaticResource LineBrush}"
                         BorderThickness="1"
                         CornerRadius="12">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Text="SELECTED SCENARIO"
                                    Style="{StaticResource SectionLabel}" />
@@ -467,8 +473,8 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
+                    </ScrollViewer>
                 </Border>
-            </Grid>
-        </ScrollViewer>
+        </Grid>
     </Grid>
 </Window>

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 
 namespace WdbgToolkit.App;
 
@@ -16,6 +17,14 @@ public sealed class McpServerManager : IDisposable
     /// </summary>
     public const string RunRootEnvironmentVariable = "WDBGMCP_ROOT";
 
+    /// <summary>
+    /// How long to wait after launching before checking whether the process exited
+    /// immediately (e.g. because Node.js is missing or the server failed to start).
+    /// </summary>
+    private static readonly TimeSpan StartupCheckDelay = TimeSpan.FromMilliseconds(600);
+
+    private readonly object _stderrLock = new();
+    private readonly StringBuilder _recentStderr = new();
     private Process? _process;
 
     public bool IsRunning => _process is { HasExited: false };
@@ -62,13 +71,26 @@ public sealed class McpServerManager : IDisposable
     public static string DefaultRunRootDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "WdbgToolkit");
 
-    public void Start(string entryPointPath)
+    /// <summary>
+    /// Starts the server on a background thread (launching a process, and especially the
+    /// first launch of an unfamiliar executable, can block for seconds on antivirus/
+    /// SmartScreen scanning, so this must never run on the UI thread). After launch, waits
+    /// briefly to detect an immediate failure (e.g. Node.js missing, or a module error) and
+    /// throws with the captured stderr output so the caller can show a clear reason instead
+    /// of a silent "not running" state.
+    /// </summary>
+    public async Task StartAsync(string entryPointPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(entryPointPath);
 
         if (IsRunning)
         {
             return;
+        }
+
+        lock (_stderrLock)
+        {
+            _recentStderr.Clear();
         }
 
         var startInfo = new ProcessStartInfo
@@ -85,24 +107,68 @@ public sealed class McpServerManager : IDisposable
 
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         process.Exited += OnProcessExited;
-        process.Start();
+        process.ErrorDataReceived += OnErrorDataReceived;
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+            }).ConfigureAwait(true);
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            process.Exited -= OnProcessExited;
+            process.ErrorDataReceived -= OnErrorDataReceived;
+            process.Dispose();
+            throw new InvalidOperationException(
+                $"Could not launch node. Make sure Node.js is installed and on PATH. ({exception.Message})",
+                exception);
+        }
+
         _process = process;
+
+        // Give the process a moment to fail fast (missing module, bad entry point, etc.)
+        // before reporting success, so the UI doesn't claim "running" for a process that
+        // is already gone.
+        await Task.Delay(StartupCheckDelay).ConfigureAwait(true);
+
+        if (process.HasExited)
+        {
+            var exitCode = process.ExitCode;
+            var errorOutput = GetRecentStderr();
+            _process = null;
+            process.Exited -= OnProcessExited;
+            process.ErrorDataReceived -= OnErrorDataReceived;
+            process.Dispose();
+
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(errorOutput)
+                    ? $"wdbgmcp exited immediately (exit code {exitCode})."
+                    : $"wdbgmcp exited immediately (exit code {exitCode}): {errorOutput}");
+        }
     }
 
-    public void Stop()
+    public async Task StopAsync()
     {
-        if (_process is null)
+        var process = _process;
+        if (process is null)
         {
             return;
         }
 
         try
         {
-            if (!_process.HasExited)
+            await Task.Run(() =>
             {
-                _process.Kill(entireProcessTree: true);
-                _process.WaitForExit(5000);
-            }
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(5000);
+                }
+            }).ConfigureAwait(true);
         }
         catch (InvalidOperationException)
         {
@@ -110,8 +176,9 @@ public sealed class McpServerManager : IDisposable
         }
         finally
         {
-            _process.Exited -= OnProcessExited;
-            _process.Dispose();
+            process.Exited -= OnProcessExited;
+            process.ErrorDataReceived -= OnErrorDataReceived;
+            process.Dispose();
             _process = null;
         }
     }
@@ -136,7 +203,60 @@ public sealed class McpServerManager : IDisposable
         }
         """;
 
+    private string GetRecentStderr()
+    {
+        lock (_stderrLock)
+        {
+            return _recentStderr.ToString().Trim();
+        }
+    }
+
+    private void OnErrorDataReceived(object sender, DataReceivedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.Data))
+        {
+            return;
+        }
+
+        lock (_stderrLock)
+        {
+            // Cap the buffer so a chatty server can't grow this unbounded.
+            if (_recentStderr.Length > 4000)
+            {
+                _recentStderr.Remove(0, _recentStderr.Length - 4000);
+            }
+
+            _recentStderr.AppendLine(e.Data);
+        }
+    }
+
     private void OnProcessExited(object? sender, EventArgs e) => Exited?.Invoke(this, EventArgs.Empty);
 
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        var process = _process;
+        if (process is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Process already exited.
+        }
+        finally
+        {
+            process.Exited -= OnProcessExited;
+            process.ErrorDataReceived -= OnErrorDataReceived;
+            process.Dispose();
+            _process = null;
+        }
+    }
 }

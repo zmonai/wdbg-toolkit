@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private IReadOnlyList<PackageManagerAvailability> _availablePackageManagers = [];
     private IReadOnlyList<string> _selectedPrerequisiteToolIds = [];
     private bool _isBusy;
+    private bool _mcpServerBusy;
 
     public MainWindow()
     {
@@ -312,18 +313,23 @@ public partial class MainWindow : Window
         {
             McpServerStatus.Text = $"Running (PID {_mcpServerManager.ProcessId}). Node.js spawns this same server for you; an MCP client (e.g. an LLM assistant) connects to its own copy using the command below over stdio.";
             StartMcpServerButton.IsEnabled = false;
-            StopMcpServerButton.IsEnabled = !_isBusy;
+            StopMcpServerButton.IsEnabled = !_mcpServerBusy;
         }
         else
         {
             McpServerStatus.Text = "Stopped. Start it to verify it runs, or copy the details below into your MCP client's configuration (the client will launch its own copy).";
-            StartMcpServerButton.IsEnabled = !_isBusy;
+            StartMcpServerButton.IsEnabled = !_mcpServerBusy;
             StopMcpServerButton.IsEnabled = false;
         }
     }
 
-    private void StartMcpServerButton_Click(object sender, RoutedEventArgs e)
+    private async void StartMcpServerButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_mcpServerBusy)
+        {
+            return;
+        }
+
         var entryPoint = McpServerManager.ResolveServerEntryPoint();
         if (entryPoint is null)
         {
@@ -331,22 +337,50 @@ public partial class MainWindow : Window
             return;
         }
 
+        _mcpServerBusy = true;
+        McpServerStatus.Text = "Starting wdbgmcp...";
+        StartMcpServerButton.IsEnabled = false;
+        StopMcpServerButton.IsEnabled = false;
         try
         {
-            _mcpServerManager.Start(entryPoint);
-            McpServerStatus.Text = "Starting...";
+            await _mcpServerManager.StartAsync(entryPoint);
         }
         catch (Exception exception)
         {
-            McpServerStatus.Text = $"Could not start wdbgmcp: {exception.Message}. Make sure Node.js is installed and on PATH.";
+            McpServerStatus.Text = $"Could not start wdbgmcp: {exception.Message}";
+        }
+        finally
+        {
+            _mcpServerBusy = false;
         }
 
         RefreshMcpServerUi();
     }
 
-    private void StopMcpServerButton_Click(object sender, RoutedEventArgs e)
+    private async void StopMcpServerButton_Click(object sender, RoutedEventArgs e)
     {
-        _mcpServerManager.Stop();
+        if (_mcpServerBusy)
+        {
+            return;
+        }
+
+        _mcpServerBusy = true;
+        McpServerStatus.Text = "Stopping wdbgmcp...";
+        StartMcpServerButton.IsEnabled = false;
+        StopMcpServerButton.IsEnabled = false;
+        try
+        {
+            await _mcpServerManager.StopAsync();
+        }
+        catch (Exception exception)
+        {
+            McpServerStatus.Text = $"Could not stop wdbgmcp cleanly: {exception.Message}";
+        }
+        finally
+        {
+            _mcpServerBusy = false;
+        }
+
         RefreshMcpServerUi();
     }
 
