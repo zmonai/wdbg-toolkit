@@ -2,7 +2,7 @@
 
 A Windows desktop foundation for guided crash, performance, networking, and custom-log diagnostics.
 
-> **Current status:** The app can detect WinGet or Chocolatey and offers scenario-specific prerequisite installation. Crash setup includes registering ProcDump for full-memory postmortem dumps after explicit confirmation. Each scenario also exposes runnable workflow actions (crash dump listing/analysis, performance tracing, packet capture/summary, custom PowerShell scripts) that write artifacts and a manifest under `%ProgramData%\WdbgToolkit`. A WiX project builds an MSI for the desktop app. The separate MCP server is not implemented yet.
+> **Current status:** The app can detect WinGet or Chocolatey and offers scenario-specific prerequisite installation. Crash setup includes registering ProcDump for full-memory postmortem dumps after explicit confirmation. Each scenario also exposes runnable workflow actions (crash dump listing/analysis, performance tracing, packet capture/summary, custom PowerShell scripts) that write artifacts and a manifest under `%ProgramData%\WdbgToolkit`. A WiX project builds an MSI for the desktop app. A separate TypeScript MCP server (`wdbgmcp`) exposes those workflow runs and artifacts to an LLM client, read-only.
 
 ## Projects
 
@@ -12,6 +12,7 @@ A Windows desktop foundation for guided crash, performance, networking, and cust
 - `src/WdbgToolkit.Workflows` — UI-independent per-scenario diagnostic actions (crash, performance, networking, custom logs) with a shared run-manifest convention, reusable by the app and a future MCP server.
 - `installer/WdbgToolkit.Installer` — WiX Toolset 6 MSI project for the desktop app.
 - `tests/WdbgToolkit.Core.Tests` — core, package-management, and workflow-action tests.
+- `mcp/wdbgmcp` — separate TypeScript MCP server exposing workflow run manifests and artifacts to an LLM client. See [`mcp/wdbgmcp/README.md`](mcp/wdbgmcp/README.md).
 
 ## Requirements
 
@@ -85,5 +86,5 @@ Each run creates `%ProgramData%\WdbgToolkit\<scenario>\<timestamp>\manifest.json
 - Keep collection and analysis behind scenario-specific adapters in the core orchestration layer.
 - Run maintained PowerShell scenarios with validated parameters, consent, timeouts, cancellation, and captured output.
 - Keep raw artifacts, normalized findings, and session metadata traceable and exportable.
-- Build the MCP server as a separate project with read-only access to collected results in its first release.
+- The MCP server (`mcp/wdbgmcp`) is a separate TypeScript project with read-only access to collected results in its first release.
 - Treat dumps, packet captures, and logs as sensitive diagnostic data.
