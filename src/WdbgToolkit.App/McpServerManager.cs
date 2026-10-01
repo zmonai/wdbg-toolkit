@@ -1,13 +1,16 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Text;
 
 namespace WdbgToolkit.App;
 
 /// <summary>
 /// Launches and tracks the local <c>wdbgmcp</c> Node.js MCP server process, and builds
-/// the copyable connection details an MCP client (e.g. an LLM assistant) needs to spawn
-/// its own instance over stdio.
+/// the copyable connection details an MCP client (e.g. an LLM assistant) needs to reach
+/// its HTTP (Streamable HTTP) endpoint over the network.
 /// </summary>
 public sealed class McpServerManager : IDisposable
 {
@@ -16,6 +19,27 @@ public sealed class McpServerManager : IDisposable
     /// Matches <c>mcp/wdbgmcp/src/workflowStore.ts</c>'s <c>WDBGMCP_ROOT</c> override.
     /// </summary>
     public const string RunRootEnvironmentVariable = "WDBGMCP_ROOT";
+
+    /// <summary>
+    /// Environment variable the launched server reads for its listen port.
+    /// Matches <c>mcp/wdbgmcp/src/index.ts</c>'s <c>WDBGMCP_PORT</c> override.
+    /// </summary>
+    public const string PortEnvironmentVariable = "WDBGMCP_PORT";
+
+    /// <summary>
+    /// Environment variable selecting the server's transport ("http" or "stdio").
+    /// Matches <c>mcp/wdbgmcp/src/index.ts</c>'s <c>WDBGMCP_TRANSPORT</c> override.
+    /// </summary>
+    public const string TransportEnvironmentVariable = "WDBGMCP_TRANSPORT";
+
+    /// <summary>
+    /// Default TCP port the server listens on. Must match the Node side's default
+    /// (<c>DEFAULT_PORT</c> in <c>mcp/wdbgmcp/src/index.ts</c>).
+    /// </summary>
+    public const int DefaultPort = 7890;
+
+    /// <summary>HTTP path MCP clients should POST/GET/DELETE against.</summary>
+    public const string McpPath = "/mcp";
 
     /// <summary>
     /// How long to wait after launching before checking whether the process exited
@@ -30,6 +54,8 @@ public sealed class McpServerManager : IDisposable
     public bool IsRunning => _process is { HasExited: false };
 
     public int? ProcessId => IsRunning ? _process!.Id : null;
+
+    public int Port { get; private set; } = DefaultPort;
 
     public event EventHandler? Exited;
 
@@ -71,6 +97,8 @@ public sealed class McpServerManager : IDisposable
     public static string DefaultRunRootDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "WdbgToolkit");
 
+    public async Task StartAsync(string entryPointPath) => await StartAsync(entryPointPath, DefaultPort).ConfigureAwait(true);
+
     /// <summary>
     /// Starts the server on a background thread (launching a process, and especially the
     /// first launch of an unfamiliar executable, can block for seconds on antivirus/
@@ -79,7 +107,7 @@ public sealed class McpServerManager : IDisposable
     /// throws with the captured stderr output so the caller can show a clear reason instead
     /// of a silent "not running" state.
     /// </summary>
-    public async Task StartAsync(string entryPointPath)
+    public async Task StartAsync(string entryPointPath, int port)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(entryPointPath);
 
@@ -104,6 +132,8 @@ public sealed class McpServerManager : IDisposable
         };
         startInfo.ArgumentList.Add(entryPointPath);
         startInfo.Environment[RunRootEnvironmentVariable] = DefaultRunRootDirectory;
+        startInfo.Environment[TransportEnvironmentVariable] = "http";
+        startInfo.Environment[PortEnvironmentVariable] = port.ToString();
 
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         process.Exited += OnProcessExited;
@@ -129,6 +159,7 @@ public sealed class McpServerManager : IDisposable
         }
 
         _process = process;
+        Port = port;
 
         // Give the process a moment to fail fast (missing module, bad entry point, etc.)
         // before reporting success, so the UI doesn't claim "running" for a process that
@@ -184,16 +215,83 @@ public sealed class McpServerManager : IDisposable
     }
 
     /// <summary>
-    /// Builds the copyable config snippets an MCP client needs to launch its own
-    /// <c>wdbgmcp</c> instance over stdio. VS Code's <c>mcp.json</c> schema (top-level
-    /// <c>servers</c> key, with a required <c>type</c> field) differs from the
+    /// Substrings in an adapter's description/name that indicate a virtual adapter
+    /// (hypervisor host-only networks, VPN clients, etc.) that's usually not reachable
+    /// from other machines on the LAN, so real physical adapters are preferred over them.
+    /// </summary>
+    private static readonly string[] VirtualAdapterMarkers =
+    [
+        "virtual", "vmware", "virtualbox", "hyper-v", "vethernet", "loopback", "tap-", "tunnel", "wsl",
+    ];
+
+    /// <summary>
+    /// Finds a non-loopback IPv4 address for this machine so remote MCP clients (e.g. VS
+    /// Code or an LLM tool running on another machine) can reach the HTTP endpoint by IP.
+    /// Prefers physical adapters (Ethernet/Wi-Fi) over virtual ones (VirtualBox/VMware/
+    /// Hyper-V host-only networks), since those are rarely reachable from other machines.
+    /// Falls back to "localhost" if no suitable network address can be found (e.g. no
+    /// active network adapters), which still works for same-machine clients.
+    /// </summary>
+    public static string ResolveMachineAddress()
+    {
+        try
+        {
+            string? fallbackAddress = null;
+
+            foreach (var networkInterface in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (networkInterface.OperationalStatus != OperationalStatus.Up ||
+                    networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                {
+                    continue;
+                }
+
+                var isVirtual = VirtualAdapterMarkers.Any(marker =>
+                    networkInterface.Description.Contains(marker, StringComparison.OrdinalIgnoreCase) ||
+                    networkInterface.Name.Contains(marker, StringComparison.OrdinalIgnoreCase));
+
+                foreach (var unicast in networkInterface.GetIPProperties().UnicastAddresses)
+                {
+                    if (unicast.Address.AddressFamily != AddressFamily.InterNetwork ||
+                        IPAddress.IsLoopback(unicast.Address))
+                    {
+                        continue;
+                    }
+
+                    if (!isVirtual)
+                    {
+                        // Physical adapter: use it immediately.
+                        return unicast.Address.ToString();
+                    }
+
+                    // Virtual adapter: remember it in case no physical adapter is found.
+                    fallbackAddress ??= unicast.Address.ToString();
+                }
+            }
+
+            if (fallbackAddress is not null)
+            {
+                return fallbackAddress;
+            }
+        }
+        catch (NetworkInformationException)
+        {
+            // Fall through to localhost below.
+        }
+
+        return "localhost";
+    }
+
+    /// <summary>
+    /// Builds the copyable config snippets an MCP client needs to reach this machine's
+    /// <c>wdbgmcp</c> HTTP endpoint over the network. VS Code's <c>mcp.json</c> schema
+    /// (top-level <c>servers</c> key, with a required <c>type</c> field) differs from the
     /// <c>mcpServers</c> schema used by Claude Desktop, Cursor, and most other MCP
     /// clients, so both are included, each ready to paste as-is.
     /// </summary>
-    public static string BuildConnectionDetails(string entryPointPath)
+    public static string BuildConnectionDetails(int port)
     {
-        var escapedEntryPoint = entryPointPath.Replace("\\", "\\\\");
-        var escapedRunRoot = DefaultRunRootDirectory.Replace("\\", "\\\\");
+        var url = $"http://{ResolveMachineAddress()}:{port}{McpPath}";
 
         return $$"""
             VS Code (and other editors using the MCP "mcp.json" schema)
@@ -203,12 +301,8 @@ public sealed class McpServerManager : IDisposable
             {
               "servers": {
                 "wdbgmcp": {
-                  "type": "stdio",
-                  "command": "node",
-                  "args": ["{{escapedEntryPoint}}"],
-                  "env": {
-                    "{{RunRootEnvironmentVariable}}": "{{escapedRunRoot}}"
-                  }
+                  "type": "http",
+                  "url": "{{url}}"
                 }
               }
             }
@@ -219,14 +313,15 @@ public sealed class McpServerManager : IDisposable
             {
               "mcpServers": {
                 "wdbgmcp": {
-                  "command": "node",
-                  "args": ["{{escapedEntryPoint}}"],
-                  "env": {
-                    "{{RunRootEnvironmentVariable}}": "{{escapedRunRoot}}"
-                  }
+                  "type": "http",
+                  "url": "{{url}}"
                 }
               }
             }
+
+            Note: the Windows Debug Toolkit app must be running with the MCP server started
+            (see the buttons above) for this URL to be reachable. The machine's firewall must
+            allow inbound connections on port {{port}} for a remote client to connect.
             """;
     }
 

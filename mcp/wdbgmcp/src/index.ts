@@ -1,8 +1,16 @@
 #!/usr/bin/env node
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { getRootDirectory, getRun, listRuns, listScenarios, readArtifact } from "./workflowStore.js";
+
+/** Default TCP port for the HTTP (Streamable HTTP) transport. Override with WDBGMCP_PORT. */
+const DEFAULT_PORT = 7890;
+
+/** HTTP request path MCP clients POST/GET/DELETE against. */
+const MCP_PATH = "/mcp";
 
 const server = new McpServer({
   name: "wdbgmcp",
@@ -94,9 +102,58 @@ server.registerTool(
   },
 );
 
-async function main() {
+/**
+ * Runs the server over the Streamable HTTP transport, bound to all network interfaces
+ * so remote MCP clients (e.g. VS Code or an LLM tool running on another machine) can
+ * reach it at http://<this-machine-ip>:<port>/mcp. This is the default transport since
+ * wdbgmcp is normally started from the Windows Debug Toolkit app and consumed remotely.
+ */
+async function runHttp(): Promise<void> {
+  const port = Number(process.env.WDBGMCP_PORT ?? DEFAULT_PORT);
+  // Stateless mode: no sessionIdGenerator, so every request is independent and the
+  // server doesn't need to track per-client session state across requests.
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  await server.connect(transport);
+
+  const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
+    const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+    if (url.pathname !== MCP_PATH) {
+      res.writeHead(404, { "Content-Type": "text/plain" }).end("Not found");
+      return;
+    }
+
+    transport.handleRequest(req, res).catch((error) => {
+      console.error("wdbgmcp: error handling request:", error);
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "text/plain" }).end("Internal server error");
+      }
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    httpServer.once("error", reject);
+    httpServer.listen(port, "0.0.0.0", () => {
+      httpServer.removeListener("error", reject);
+      resolve();
+    });
+  });
+
+  console.error(`wdbgmcp listening on http://0.0.0.0:${port}${MCP_PATH}`);
+}
+
+/** Runs the server over stdio, for MCP clients that spawn and own the child process directly. */
+async function runStdio(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
+}
+
+async function main() {
+  const transportMode = (process.env.WDBGMCP_TRANSPORT ?? "http").trim().toLowerCase();
+  if (transportMode === "stdio") {
+    await runStdio();
+  } else {
+    await runHttp();
+  }
 }
 
 main().catch((error) => {

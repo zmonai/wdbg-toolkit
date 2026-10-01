@@ -306,18 +306,20 @@ public partial class MainWindow : Window
             return;
         }
 
-        McpServerDetails.Text = McpServerManager.BuildConnectionDetails(entryPoint);
+        var port = _mcpServerManager.IsRunning ? _mcpServerManager.Port : McpServerManager.DefaultPort;
+        McpServerDetails.Text = McpServerManager.BuildConnectionDetails(port);
         CopyMcpServerDetailsButton.IsEnabled = true;
 
         if (_mcpServerManager.IsRunning)
         {
-            McpServerStatus.Text = $"Running (PID {_mcpServerManager.ProcessId}). Node.js spawns this same server for you; an MCP client (e.g. an LLM assistant) connects to its own copy using the command below over stdio.";
+            var url = $"http://{McpServerManager.ResolveMachineAddress()}:{_mcpServerManager.Port}{McpServerManager.McpPath}";
+            McpServerStatus.Text = $"Running (PID {_mcpServerManager.ProcessId}) and reachable at {url}. Any MCP client on the network (e.g. VS Code or an LLM assistant) can connect using the details below.";
             StartMcpServerButton.IsEnabled = false;
             StopMcpServerButton.IsEnabled = !_mcpServerBusy;
         }
         else
         {
-            McpServerStatus.Text = "Stopped. Start it to verify it runs, or copy the details below into your MCP client's configuration (the client will launch its own copy).";
+            McpServerStatus.Text = "Stopped. Start it to make it reachable over HTTP at the URL below, then paste the config into your MCP client.";
             StartMcpServerButton.IsEnabled = !_mcpServerBusy;
             StopMcpServerButton.IsEnabled = false;
         }

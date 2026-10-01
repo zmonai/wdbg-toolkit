@@ -40,20 +40,31 @@ npm run build
 npm start
 ```
 
-`wdbgmcp` speaks MCP over stdio, so it's meant to be launched by an MCP client (for
-example, as a configured server in an AI assistant), not run interactively on its own.
+By default `wdbgmcp` speaks MCP over the **Streamable HTTP** transport, listening on all
+network interfaces (`0.0.0.0`) on port `7890` at the `/mcp` path — e.g.
+`http://<this-machine's-IP>:7890/mcp`. This lets any MCP client (VS Code, an LLM
+assistant, etc.), on this machine or another one on the network, connect directly by
+URL instead of needing to spawn its own copy of the process. The Windows Debug Toolkit
+app's **MCP Server** scenario starts/stops this same server and shows ready-to-paste
+VS Code (`mcp.json`) and `mcpServers`-style config snippets with the resolved URL.
+
+Set `WDBGMCP_TRANSPORT=stdio` to run over stdio instead, for MCP clients that spawn and
+own the child process directly rather than connecting over the network.
 
 ## Configuration
 
 | Environment variable | Purpose |
 | --- | --- |
 | `WDBGMCP_ROOT` | Overrides the workflow-run root directory. Defaults to `%ProgramData%\WdbgToolkit`. Useful for testing or reading runs collected on another machine. |
+| `WDBGMCP_TRANSPORT` | `http` (default) or `stdio`. Selects the MCP transport. |
+| `WDBGMCP_PORT` | TCP port for the HTTP transport. Defaults to `7890`. Ignored in `stdio` mode. |
 
 ## Project layout
 
 - `src/workflowStore.ts` — filesystem access: lists scenarios/runs and reads
   manifests/artifacts, with path checks to keep reads confined to the workflow root.
-- `src/index.ts` — MCP server entry point; registers the tools above over stdio.
+- `src/index.ts` — MCP server entry point; registers the tools above over HTTP
+  (default) or stdio (`WDBGMCP_TRANSPORT=stdio`).
 
 ## Status
 
