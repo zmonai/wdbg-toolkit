@@ -48,7 +48,7 @@ The library catalog currently maps:
 | Npcap | Not available | `npcap` |
 | Windows Performance Toolkit (Windows ADK package) | `Microsoft.WindowsADK` | `windows-adk-all` |
 
-The app's **Debug Machine Setup** button installs the union of all prerequisites defined for crash, performance, and networking scenarios. It asks for confirmation and lists which package manager will install each tool. It also registers ProcDump for full-memory postmortem dumps. Custom logs is excluded because its prerequisites are not defined yet.
+The app's **Debug Machine Setup** button installs the union of all prerequisites defined for crash, performance, networking, and MCP Server scenarios. It asks for confirmation and lists which package manager will install each tool. It also registers ProcDump for full-memory postmortem dumps. Custom logs is excluded because its prerequisites are not defined yet.
 
 The scenario-specific **Install prerequisites** control follows the selected diagnostic scenario:
 
@@ -58,6 +58,7 @@ The scenario-specific **Install prerequisites** control follows the selected dia
 | Performance | Windows Performance Toolkit, Sysinternals Suite |
 | Networking | Wireshark, Npcap, Sysinternals Suite |
 | Custom logs | Placeholder; prerequisites are not defined yet |
+| MCP Server | Node.js (required to run `wdbgmcp`) |
 
 For scenarios with defined prerequisites, the app checks for both package managers, lets the user select one, then asks for confirmation before installing that scenario's tools. Npcap currently has no direct WinGet package, so when WinGet is selected for networking, the app explicitly routes only Npcap through Chocolatey and shows the per-tool source in the confirmation dialog. If Chocolatey is unavailable, it blocks the install and explains that Chocolatey must be installed separately. The library starts package-manager processes without a shell, passes package IDs as separate arguments, accepts the WinGet package/source agreements for the already-confirmed install, and returns command output and failures to the caller. Chocolatey is not installed by the library, and administrator elevation is not requested automatically. If a selected manager requires elevation, run the toolkit with appropriate privileges; the app reports failures rather than silently retrying or elevating. Npcap installs a network capture driver and may require administrator privileges and acceptance of its license.
 
@@ -79,6 +80,10 @@ For crash analysis, ProcDump is installed through Chocolatey because there is no
 | Custom logs | `custom-logs.run-script` | Runs a selected PowerShell script (`powershell -NoProfile -ExecutionPolicy Bypass -File <script>`). |
 
 Each run creates `%ProgramData%\WdbgToolkit\<scenario>\<timestamp>\manifest.json` recording the action, its result, and any artifact paths, giving the app and the MCP server an identical, inspectable record of what ran. In the app, select a scenario and use **Workflow actions**; actions with a required input (e.g. a capture or script path) show a text box before the **Run** button. `wpr`, `dumpcap`, and some PowerShell scripts may require administrator privileges to run successfully.
+
+### MCP Server scenario
+
+Selecting the **MCP Server** scenario shows an **MCP Server** panel with **Start server** / **Stop server** buttons and a read-only, copyable **connection details** box. The app resolves the built `mcp/wdbgmcp/dist/index.js` entry point (built with `npm run build` in `mcp/wdbgmcp`) relative to the running app, and **Start server** launches it with `node` as a convenience check that Node.js and the server are working, showing its process ID while running. The connection details box always shows the JSON snippet (`command`, `args`, `env.WDBGMCP_ROOT`) to paste into an MCP client's own configuration — since `wdbgmcp` communicates over stdio, a real MCP client (e.g. an LLM assistant) spawns its own instance using that same command rather than connecting to the one started from the app. This entry-point lookup currently only works for a local/build-from-source layout; an installed MSI build does not yet bundle `mcp/wdbgmcp`.
 
 ## Product direction
 

@@ -40,7 +40,12 @@ public static class ToolPackageCatalog
                 "windows-performance-toolkit",
                 "Windows Performance Toolkit (Windows ADK package)",
                 "Microsoft.WindowsADK",
-                "windows-adk-all")
+                "windows-adk-all"),
+            new(
+                "nodejs",
+                "Node.js",
+                "OpenJS.NodeJS",
+                "nodejs")
         ]);
 
     public static IReadOnlyList<ToolPackage> All => Packages;

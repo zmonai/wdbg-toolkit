@@ -356,6 +356,75 @@
                             </StackPanel>
                         </Border>
 
+                        <Border x:Name="McpServerSection"
+                                Margin="0,14,0,0"
+                                Padding="16"
+                                Background="#FAFBFD"
+                                BorderBrush="{StaticResource LineBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="MCP SERVER"
+                                           Style="{StaticResource SectionLabel}" />
+                                <TextBlock x:Name="McpServerStatus"
+                                           Margin="0,8,0,0"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           FontSize="11"
+                                           LineHeight="16"
+                                           TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button x:Name="StartMcpServerButton"
+                                            Content="Start server"
+                                            Padding="14,8"
+                                            Click="StartMcpServerButton_Click"
+                                            Background="{StaticResource AccentBrush}"
+                                            BorderThickness="0"
+                                            Foreground="White"
+                                            FontWeight="SemiBold" />
+                                    <Button x:Name="StopMcpServerButton"
+                                            Content="Stop server"
+                                            Margin="10,0,0,0"
+                                            Padding="14,8"
+                                            IsEnabled="False"
+                                            Click="StopMcpServerButton_Click"
+                                            Background="White"
+                                            BorderBrush="{StaticResource LineBrush}"
+                                            BorderThickness="1"
+                                            Foreground="{StaticResource InkBrush}"
+                                            FontWeight="SemiBold" />
+                                </StackPanel>
+                                <TextBlock Text="Connection details"
+                                           Margin="0,14,0,6"
+                                           Foreground="{StaticResource InkBrush}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold" />
+                                <TextBox x:Name="McpServerDetails"
+                                         Padding="8"
+                                         FontFamily="Consolas"
+                                         FontSize="11"
+                                         IsReadOnly="True"
+                                         TextWrapping="Wrap"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Height="140"
+                                         Background="White"
+                                         BorderBrush="{StaticResource LineBrush}" />
+                                <Button x:Name="CopyMcpServerDetailsButton"
+                                        Content="Copy"
+                                        Margin="0,8,0,0"
+                                        HorizontalAlignment="Left"
+                                        Padding="14,8"
+                                        IsEnabled="False"
+                                        Click="CopyMcpServerDetailsButton_Click"
+                                        Background="White"
+                                        BorderBrush="{StaticResource LineBrush}"
+                                        BorderThickness="1"
+                                        Foreground="{StaticResource InkBrush}"
+                                        FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Border>
+
                         <Border Height="1"
                                 Margin="0,22,0,16"
                                 Background="{StaticResource LineBrush}" />

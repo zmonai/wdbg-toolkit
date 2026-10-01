@@ -51,7 +51,15 @@ public static class ScenarioCatalog
                 ["PowerShell", "Custom log parsers"],
                 [],
                 "Prerequisites for custom log analysis have not been defined yet.",
-                ScenarioAvailability.Planned)
+                ScenarioAvailability.Planned),
+            new(
+                "mcp-server",
+                "MCP Server",
+                "Run the wdbgmcp server so an MCP-compatible LLM client can read workflow run data collected by this toolkit.",
+                ["wdbgmcp (Node.js MCP server)"],
+                ["nodejs"],
+                "Install Node.js, required to run the wdbgmcp server.",
+                ScenarioAvailability.Available)
         ]);
 
     public static IReadOnlyList<DiagnosticScenario> All => Scenarios;

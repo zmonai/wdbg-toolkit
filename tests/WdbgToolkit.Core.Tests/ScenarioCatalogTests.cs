@@ -25,14 +25,24 @@ public sealed class ScenarioCatalogTests
         Assert.Contains("performance", scenarioIds);
         Assert.Contains("networking", scenarioIds);
         Assert.Contains("custom-logs", scenarioIds);
+        Assert.Contains("mcp-server", scenarioIds);
     }
 
     [Fact]
-    public void InitialScenariosAreNotAdvertisedAsAvailable()
+    public void InitialDiagnosticScenariosAreNotAdvertisedAsAvailable()
     {
         Assert.All(
-            ScenarioCatalog.All,
+            ScenarioCatalog.All.Where(scenario => scenario.Id != "mcp-server"),
             scenario => Assert.Equal(ScenarioAvailability.Planned, scenario.Availability));
+    }
+
+    [Fact]
+    public void McpServerScenarioIsAvailable()
+    {
+        var scenario = ScenarioCatalog.All.Single(item => item.Id == "mcp-server");
+
+        Assert.Equal(ScenarioAvailability.Available, scenario.Availability);
+        Assert.Equal(["nodejs"], scenario.PrerequisiteToolIds);
     }
 
     [Fact]
@@ -69,7 +79,8 @@ public sealed class ScenarioCatalogTests
                 "procdump",
                 "windows-performance-toolkit",
                 "wireshark",
-                "npcap"
+                "npcap",
+                "nodejs"
             ],
             ScenarioCatalog.AllPrerequisiteToolIds);
     }

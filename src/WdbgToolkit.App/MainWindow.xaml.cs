@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     private readonly PostmortemDebuggerConfigurator _postmortemDebuggerConfigurator;
     private readonly WorkflowActionCatalog _workflowActionCatalog;
     private readonly WorkflowRunner _workflowRunner;
+    private readonly McpServerManager _mcpServerManager = new();
     private IReadOnlyList<PackageManagerAvailability> _availablePackageManagers = [];
     private IReadOnlyList<string> _selectedPrerequisiteToolIds = [];
     private bool _isBusy;
@@ -25,12 +26,20 @@ public partial class MainWindow : Window
         _postmortemDebuggerConfigurator = new PostmortemDebuggerConfigurator(_commandRunner);
         _workflowActionCatalog = new WorkflowActionCatalog(_commandRunner);
         _workflowRunner = new WorkflowRunner(_workflowActionCatalog);
+        _mcpServerManager.Exited += McpServerManager_Exited;
         DataContext = ScenarioCatalog.All.Select(scenario => new ScenarioListItem(
             scenario,
             IconFor(scenario.Id)));
         DeviceInfo.Text = $"{Environment.OSVersion.VersionString}  |  .NET {Environment.Version}";
         ScenarioList.SelectedIndex = 0;
         Loaded += MainWindow_Loaded;
+        Closed += MainWindow_Closed;
+    }
+
+    private void MainWindow_Closed(object? sender, EventArgs e)
+    {
+        _mcpServerManager.Exited -= McpServerManager_Exited;
+        _mcpServerManager.Dispose();
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -200,6 +209,8 @@ public partial class MainWindow : Window
         }
     }
 
+    private const string McpServerScenarioId = "mcp-server";
+
     private void ScenarioList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (ScenarioList.SelectedItem is not ScenarioListItem item)
@@ -209,6 +220,7 @@ public partial class MainWindow : Window
             ScenarioTools.ItemsSource = null;
             WorkflowActionsList.ItemsSource = null;
             WorkflowActionsEmptyNotice.Visibility = Visibility.Collapsed;
+            McpServerSection.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -238,6 +250,13 @@ public partial class MainWindow : Window
             ? Visibility.Visible
             : Visibility.Collapsed;
         WorkflowActionStatus.Text = string.Empty;
+
+        var isMcpServerScenario = string.Equals(item.Scenario.Id, McpServerScenarioId, StringComparison.Ordinal);
+        McpServerSection.Visibility = isMcpServerScenario ? Visibility.Visible : Visibility.Collapsed;
+        if (isMcpServerScenario)
+        {
+            RefreshMcpServerUi();
+        }
     }
 
     private async void RunWorkflowActionButton_Click(object sender, RoutedEventArgs e)
@@ -272,6 +291,88 @@ public partial class MainWindow : Window
         }
     }
 
+    private void RefreshMcpServerUi()
+    {
+        var entryPoint = McpServerManager.ResolveServerEntryPoint();
+        if (entryPoint is null)
+        {
+            McpServerStatus.Text =
+                "wdbgmcp was not found. Build it first: cd mcp\\wdbgmcp, then npm install and npm run build.";
+            McpServerDetails.Text = string.Empty;
+            StartMcpServerButton.IsEnabled = false;
+            StopMcpServerButton.IsEnabled = false;
+            CopyMcpServerDetailsButton.IsEnabled = false;
+            return;
+        }
+
+        McpServerDetails.Text = McpServerManager.BuildConnectionDetails(entryPoint);
+        CopyMcpServerDetailsButton.IsEnabled = true;
+
+        if (_mcpServerManager.IsRunning)
+        {
+            McpServerStatus.Text = $"Running (PID {_mcpServerManager.ProcessId}). Node.js spawns this same server for you; an MCP client (e.g. an LLM assistant) connects to its own copy using the command below over stdio.";
+            StartMcpServerButton.IsEnabled = false;
+            StopMcpServerButton.IsEnabled = !_isBusy;
+        }
+        else
+        {
+            McpServerStatus.Text = "Stopped. Start it to verify it runs, or copy the details below into your MCP client's configuration (the client will launch its own copy).";
+            StartMcpServerButton.IsEnabled = !_isBusy;
+            StopMcpServerButton.IsEnabled = false;
+        }
+    }
+
+    private void StartMcpServerButton_Click(object sender, RoutedEventArgs e)
+    {
+        var entryPoint = McpServerManager.ResolveServerEntryPoint();
+        if (entryPoint is null)
+        {
+            RefreshMcpServerUi();
+            return;
+        }
+
+        try
+        {
+            _mcpServerManager.Start(entryPoint);
+            McpServerStatus.Text = "Starting...";
+        }
+        catch (Exception exception)
+        {
+            McpServerStatus.Text = $"Could not start wdbgmcp: {exception.Message}. Make sure Node.js is installed and on PATH.";
+        }
+
+        RefreshMcpServerUi();
+    }
+
+    private void StopMcpServerButton_Click(object sender, RoutedEventArgs e)
+    {
+        _mcpServerManager.Stop();
+        RefreshMcpServerUi();
+    }
+
+    private void McpServerManager_Exited(object? sender, EventArgs e)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (string.Equals(
+                    (ScenarioList.SelectedItem as ScenarioListItem)?.Scenario.Id,
+                    McpServerScenarioId,
+                    StringComparison.Ordinal))
+            {
+                RefreshMcpServerUi();
+            }
+        });
+    }
+
+    private void CopyMcpServerDetailsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(McpServerDetails.Text))
+        {
+            Clipboard.SetText(McpServerDetails.Text);
+            McpServerStatus.Text = "Connection details copied to the clipboard.";
+        }
+    }
+
     private static string IconFor(string scenarioId) =>
         scenarioId switch
         {
@@ -279,6 +380,7 @@ public partial class MainWindow : Window
             "performance" => "↗",
             "networking" => "⇄",
             "custom-logs" => "≡",
+            "mcp-server" => "⚙",
             _ => "·"
         };
 
@@ -341,6 +443,10 @@ public partial class MainWindow : Window
         PackageManagerSelector.IsEnabled = !isBusy && _availablePackageManagers.Count > 0;
         WorkflowActionsList.IsEnabled = !isBusy;
         UpdateInstallButton();
+        if (McpServerSection.Visibility == Visibility.Visible)
+        {
+            RefreshMcpServerUi();
+        }
     }
 
     private void UpdateInstallButton()
