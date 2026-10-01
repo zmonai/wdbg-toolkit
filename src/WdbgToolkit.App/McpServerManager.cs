@@ -184,24 +184,51 @@ public sealed class McpServerManager : IDisposable
     }
 
     /// <summary>
-    /// Builds the connection details an MCP client config (e.g. Claude Desktop's
-    /// <c>claude_desktop_config.json</c> or VS Code's <c>mcp.json</c>) needs to launch
-    /// its own <c>wdbgmcp</c> instance over stdio.
+    /// Builds the copyable config snippets an MCP client needs to launch its own
+    /// <c>wdbgmcp</c> instance over stdio. VS Code's <c>mcp.json</c> schema (top-level
+    /// <c>servers</c> key, with a required <c>type</c> field) differs from the
+    /// <c>mcpServers</c> schema used by Claude Desktop, Cursor, and most other MCP
+    /// clients, so both are included, each ready to paste as-is.
     /// </summary>
-    public static string BuildConnectionDetails(string entryPointPath) =>
-        $$"""
-        {
-          "mcpServers": {
-            "wdbgmcp": {
-              "command": "node",
-              "args": ["{{entryPointPath.Replace("\\", "\\\\")}}"],
-              "env": {
-                "{{RunRootEnvironmentVariable}}": "{{DefaultRunRootDirectory.Replace("\\", "\\\\")}}"
+    public static string BuildConnectionDetails(string entryPointPath)
+    {
+        var escapedEntryPoint = entryPointPath.Replace("\\", "\\\\");
+        var escapedRunRoot = DefaultRunRootDirectory.Replace("\\", "\\\\");
+
+        return $$"""
+            VS Code (and other editors using the MCP "mcp.json" schema)
+            Add to your user settings "mcp.json" (Ctrl+Shift+P -> "MCP: Open User Configuration"),
+            or to .vscode/mcp.json in this workspace:
+
+            {
+              "servers": {
+                "wdbgmcp": {
+                  "type": "stdio",
+                  "command": "node",
+                  "args": ["{{escapedEntryPoint}}"],
+                  "env": {
+                    "{{RunRootEnvironmentVariable}}": "{{escapedRunRoot}}"
+                  }
+                }
               }
             }
-          }
-        }
-        """;
+
+            Claude Desktop, Cursor, and other clients using "mcpServers"
+            Add to claude_desktop_config.json / mcp.json:
+
+            {
+              "mcpServers": {
+                "wdbgmcp": {
+                  "command": "node",
+                  "args": ["{{escapedEntryPoint}}"],
+                  "env": {
+                    "{{RunRootEnvironmentVariable}}": "{{escapedRunRoot}}"
+                  }
+                }
+              }
+            }
+            """;
+    }
 
     private string GetRecentStderr()
     {
