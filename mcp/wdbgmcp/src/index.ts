@@ -12,95 +12,103 @@ const DEFAULT_PORT = 7890;
 /** HTTP request path MCP clients POST/GET/DELETE against. */
 const MCP_PATH = "/mcp";
 
-const server = new McpServer({
-  name: "wdbgmcp",
-  version: "0.1.0",
-});
+/**
+ * Builds a fully configured MCP server. Stateless HTTP mode creates a fresh server and
+ * transport per request, because a stateless transport can only serve a single request.
+ */
+function createMcpServer(): McpServer {
+  const server = new McpServer({
+    name: "wdbgmcp",
+    version: "0.1.0",
+  });
 
-server.registerTool(
-  "list_scenarios",
-  {
-    title: "List diagnostic scenarios",
-    description:
-      "Lists diagnostic scenario ids (e.g. crash, performance, networking) that have at least one recorded Windows Debug Toolkit workflow run.",
-    inputSchema: {},
-  },
-  async () => {
-    const scenarios = await listScenarios();
-    return {
-      content: [{ type: "text", text: JSON.stringify({ root: getRootDirectory(), scenarios }, null, 2) }],
-    };
-  },
-);
-
-server.registerTool(
-  "list_workflow_runs",
-  {
-    title: "List workflow runs",
-    description:
-      "Lists Windows Debug Toolkit workflow runs (most recent first), optionally filtered to one scenario. Each run includes its manifest: action id, success, summary, structured data, and artifact paths.",
-    inputSchema: {
-      scenarioId: z
-        .string()
-        .optional()
-        .describe("Scenario id to filter by (e.g. 'crash', 'performance', 'networking'). Omit to list runs across all scenarios."),
+  server.registerTool(
+    "list_scenarios",
+    {
+      title: "List diagnostic scenarios",
+      description:
+        "Lists diagnostic scenario ids (e.g. crash, performance, networking) that have at least one recorded Windows Debug Toolkit workflow run.",
+      inputSchema: {},
     },
-  },
-  async ({ scenarioId }) => {
-    const runs = await listRuns(scenarioId);
-    return {
-      content: [{ type: "text", text: JSON.stringify(runs, null, 2) }],
-    };
-  },
-);
-
-server.registerTool(
-  "get_workflow_run",
-  {
-    title: "Get a workflow run's manifest",
-    description: "Reads a single workflow run's manifest.json by scenario id and run id (the run's timestamp folder name).",
-    inputSchema: {
-      scenarioId: z.string().describe("Scenario id, e.g. 'crash'."),
-      runId: z.string().describe("Run id (timestamp folder name), e.g. '20260101-120000'."),
-    },
-  },
-  async ({ scenarioId, runId }) => {
-    const run = await getRun(scenarioId, runId);
-    if (!run) {
+    async () => {
+      const scenarios = await listScenarios();
       return {
-        isError: true,
-        content: [{ type: "text", text: `No run found for scenario '${scenarioId}' and run id '${runId}'.` }],
+        content: [{ type: "text", text: JSON.stringify({ root: getRootDirectory(), scenarios }, null, 2) }],
       };
-    }
-
-    return {
-      content: [{ type: "text", text: JSON.stringify(run, null, 2) }],
-    };
-  },
-);
-
-server.registerTool(
-  "read_artifact",
-  {
-    title: "Read a workflow artifact file",
-    description:
-      "Reads the text contents of an artifact file produced by a workflow run (e.g. a !analyze report or a tshark summary). The path must be one of the 'Artifacts' entries from a run's manifest.",
-    inputSchema: {
-      artifactPath: z.string().describe("Absolute path to the artifact file, as returned in a run manifest's Artifacts array."),
     },
-  },
-  async ({ artifactPath }) => {
-    try {
-      const contents = await readArtifact(artifactPath);
-      return { content: [{ type: "text", text: contents }] };
-    } catch (error) {
+  );
+
+  server.registerTool(
+    "list_workflow_runs",
+    {
+      title: "List workflow runs",
+      description:
+        "Lists Windows Debug Toolkit workflow runs (most recent first), optionally filtered to one scenario. Each run includes its manifest: action id, success, summary, structured data, and artifact paths.",
+      inputSchema: {
+        scenarioId: z
+          .string()
+          .optional()
+          .describe("Scenario id to filter by (e.g. 'crash', 'performance', 'networking'). Omit to list runs across all scenarios."),
+      },
+    },
+    async ({ scenarioId }) => {
+      const runs = await listRuns(scenarioId);
       return {
-        isError: true,
-        content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+        content: [{ type: "text", text: JSON.stringify(runs, null, 2) }],
       };
-    }
-  },
-);
+    },
+  );
+
+  server.registerTool(
+    "get_workflow_run",
+    {
+      title: "Get a workflow run's manifest",
+      description: "Reads a single workflow run's manifest.json by scenario id and run id (the run's timestamp folder name).",
+      inputSchema: {
+        scenarioId: z.string().describe("Scenario id, e.g. 'crash'."),
+        runId: z.string().describe("Run id (timestamp folder name), e.g. '20260101-120000'."),
+      },
+    },
+    async ({ scenarioId, runId }) => {
+      const run = await getRun(scenarioId, runId);
+      if (!run) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `No run found for scenario '${scenarioId}' and run id '${runId}'.` }],
+        };
+      }
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(run, null, 2) }],
+      };
+    },
+  );
+
+  server.registerTool(
+    "read_artifact",
+    {
+      title: "Read a workflow artifact file",
+      description:
+        "Reads the text contents of an artifact file produced by a workflow run (e.g. a !analyze report or a tshark summary). The path must be one of the 'Artifacts' entries from a run's manifest.",
+      inputSchema: {
+        artifactPath: z.string().describe("Absolute path to the artifact file, as returned in a run manifest's Artifacts array."),
+      },
+    },
+    async ({ artifactPath }) => {
+      try {
+        const contents = await readArtifact(artifactPath);
+        return { content: [{ type: "text", text: contents }] };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+        };
+      }
+    },
+  );
+
+  return server;
+}
 
 /**
  * Runs the server over the Streamable HTTP transport, bound to all network interfaces
@@ -110,11 +118,6 @@ server.registerTool(
  */
 async function runHttp(): Promise<void> {
   const port = Number(process.env.WDBGMCP_PORT ?? DEFAULT_PORT);
-  // Stateless mode: no sessionIdGenerator, so every request is independent and the
-  // server doesn't need to track per-client session state across requests.
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  await server.connect(transport);
-
   const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
     if (url.pathname !== MCP_PATH) {
@@ -122,12 +125,15 @@ async function runHttp(): Promise<void> {
       return;
     }
 
-    transport.handleRequest(req, res).catch((error) => {
-      console.error("wdbgmcp: error handling request:", error);
-      if (!res.headersSent) {
-        res.writeHead(500, { "Content-Type": "text/plain" }).end("Internal server error");
-      }
-    });
+    // Stateless mode has no server-initiated SSE stream or session to terminate.
+    if (req.method !== "POST") {
+      res
+        .writeHead(405, { "Content-Type": "application/json", Allow: "POST" })
+        .end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null }));
+      return;
+    }
+
+    void handleStatelessRequest(req, res);
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -141,10 +147,32 @@ async function runHttp(): Promise<void> {
   console.error(`wdbgmcp listening on http://0.0.0.0:${port}${MCP_PATH}`);
 }
 
+/** Serves one POST with its own server/transport pair, as required by stateless Streamable HTTP. */
+async function handleStatelessRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const server = createMcpServer();
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  res.on("close", () => {
+    void transport.close();
+    void server.close();
+  });
+
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res);
+  } catch (error) {
+    console.error("wdbgmcp: error handling request:", error);
+    if (!res.headersSent) {
+      res
+        .writeHead(500, { "Content-Type": "application/json" })
+        .end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32603, message: "Internal server error" }, id: null }));
+    }
+  }
+}
+
 /** Runs the server over stdio, for MCP clients that spawn and own the child process directly. */
 async function runStdio(): Promise<void> {
   const transport = new StdioServerTransport();
-  await server.connect(transport);
+  await createMcpServer().connect(transport);
 }
 
 async function main() {
