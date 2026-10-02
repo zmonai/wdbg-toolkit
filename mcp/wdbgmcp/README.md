@@ -5,7 +5,7 @@ data collected by the [Windows Debug Toolkit](../../README.md) (`WdbgToolkit.App
 
 It does not install tools or run diagnostic actions itself. The desktop app's
 `WdbgToolkit.Workflows` library is the thing that actually runs `cdb`, `wpr`,
-`dumpcap`/`tshark`, and custom PowerShell scripts; each run writes a `manifest.json`
+and `dumpcap`/`tshark`; each run writes a `manifest.json`
 plus any artifact files under:
 
 ```

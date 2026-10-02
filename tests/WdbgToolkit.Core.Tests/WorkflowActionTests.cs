@@ -218,81 +218,6 @@ public sealed class WorkflowActionTests
     }
 
     [Fact]
-    public async Task ListCustomScriptsCreatesFolderAndListsPs1Files()
-    {
-        var scriptsDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        try
-        {
-            var action = new ListCustomScriptsAction(scriptsDirectory);
-
-            var emptyResult = await action.ExecuteAsync(new Dictionary<string, string>());
-            Assert.True(Directory.Exists(scriptsDirectory));
-            Assert.Equal("0", emptyResult.Data["count"]);
-
-            File.WriteAllText(Path.Combine(scriptsDirectory, "triage.ps1"), string.Empty);
-            var populatedResult = await action.ExecuteAsync(new Dictionary<string, string>());
-
-            Assert.Equal("1", populatedResult.Data["count"]);
-            Assert.Equal("triage.ps1", populatedResult.Data["scripts"]);
-        }
-        finally
-        {
-            if (Directory.Exists(scriptsDirectory))
-            {
-                Directory.Delete(scriptsDirectory, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    public async Task RunCustomScriptFailsWhenScriptMissing()
-    {
-        var scriptsDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        var commandRunner = new FakeCommandRunner();
-        var action = new RunCustomScriptAction(commandRunner, scriptsDirectory);
-
-        var result = await action.ExecuteAsync(new Dictionary<string, string> { ["scriptPath"] = "missing.ps1" });
-
-        Assert.False(result.Succeeded);
-        Assert.Empty(commandRunner.Calls);
-    }
-
-    [Fact]
-    public async Task RunCustomScriptRunsPowerShellWithBypassPolicyAndCapturesOutput()
-    {
-        var scriptsDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(scriptsDirectory);
-        var runDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(runDirectory);
-        try
-        {
-            var scriptPath = Path.Combine(scriptsDirectory, "triage.ps1");
-            File.WriteAllText(scriptPath, "Write-Output 'ok'");
-            var commandRunner = new FakeCommandRunner();
-            commandRunner.Enqueue(new CommandResult(0, "ok", string.Empty));
-            var action = new RunCustomScriptAction(commandRunner, scriptsDirectory);
-
-            var result = await action.ExecuteAsync(new Dictionary<string, string>
-            {
-                ["scriptPath"] = "triage.ps1",
-                ["RunDirectory"] = runDirectory
-            });
-
-            Assert.True(result.Succeeded);
-            Assert.Equal(
-                ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
-                commandRunner.Calls[0].Arguments);
-            var outputPath = Assert.Single(result.ArtifactPaths);
-            Assert.Contains("ok", await File.ReadAllTextAsync(outputPath));
-        }
-        finally
-        {
-            Directory.Delete(scriptsDirectory, recursive: true);
-            Directory.Delete(runDirectory, recursive: true);
-        }
-    }
-
-    [Fact]
     public void CatalogHasNoDuplicateActionIdsAndCoversEveryScenario()
     {
         var catalog = new WorkflowActionCatalog(new FakeCommandRunner());
@@ -300,10 +225,12 @@ public sealed class WorkflowActionTests
         var ids = catalog.All.Select(definition => definition.Id).ToArray();
         Assert.Equal(ids.Length, ids.Distinct(StringComparer.OrdinalIgnoreCase).Count());
 
-        foreach (var scenarioId in new[] { "crash", "performance", "networking", "custom-logs" })
+        foreach (var scenarioId in new[] { "crash", "performance", "networking" })
         {
             Assert.NotEmpty(catalog.GetByScenario(scenarioId));
         }
+
+        Assert.Empty(catalog.GetByScenario("custom-logs"));
     }
 
     [Fact]
@@ -312,14 +239,14 @@ public sealed class WorkflowActionTests
         var rootDirectory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         try
         {
-            var scriptsDirectory = Path.Combine(rootDirectory, "Scripts");
-            var catalog = new WorkflowActionCatalog(new FakeCommandRunner(), customScriptsDirectory: scriptsDirectory);
+            var dumpDirectory = Path.Combine(rootDirectory, "Dumps");
+            var catalog = new WorkflowActionCatalog(new FakeCommandRunner(), crashDumpDirectory: dumpDirectory);
             var runner = new WorkflowRunner(catalog, rootDirectory);
 
-            var result = await runner.RunAsync("custom-logs.list-scripts");
+            var result = await runner.RunAsync("crash.list-dumps");
 
             Assert.True(result.Succeeded);
-            var scenarioDirectory = Path.Combine(rootDirectory, "custom-logs");
+            var scenarioDirectory = Path.Combine(rootDirectory, "crash");
             var runDirectories = Directory.GetDirectories(scenarioDirectory);
             var manifestPath = Path.Combine(Assert.Single(runDirectories), "manifest.json");
             Assert.True(File.Exists(manifestPath));

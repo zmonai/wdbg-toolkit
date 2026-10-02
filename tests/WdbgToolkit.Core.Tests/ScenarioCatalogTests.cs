@@ -24,8 +24,8 @@ public sealed class ScenarioCatalogTests
         Assert.Contains("crash", scenarioIds);
         Assert.Contains("performance", scenarioIds);
         Assert.Contains("networking", scenarioIds);
-        Assert.Contains("custom-logs", scenarioIds);
         Assert.Contains("mcp-server", scenarioIds);
+        Assert.DoesNotContain("custom-logs", scenarioIds);
     }
 
     [Fact]
@@ -58,15 +58,6 @@ public sealed class ScenarioCatalogTests
             ["wireshark", "npcap", "sysinternals-suite"],
             ScenarioCatalog.All.Single(scenario => scenario.Id == "networking").PrerequisiteToolIds);
         Assert.Contains("Npcap", ScenarioCatalog.All.Single(scenario => scenario.Id == "networking").Tools);
-    }
-
-    [Fact]
-    public void CustomLogsHasPlaceholderInsteadOfInstallablePrerequisites()
-    {
-        var scenario = ScenarioCatalog.All.Single(item => item.Id == "custom-logs");
-
-        Assert.Empty(scenario.PrerequisiteToolIds);
-        Assert.Contains("not been defined", scenario.PrerequisiteDescription);
     }
 
     [Fact]

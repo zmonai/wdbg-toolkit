@@ -14,8 +14,7 @@ public sealed class WorkflowActionCatalog
 
     public WorkflowActionCatalog(
         ICommandRunner commandRunner,
-        string? crashDumpDirectory = null,
-        string? customScriptsDirectory = null)
+        string? crashDumpDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(commandRunner);
 
@@ -26,9 +25,7 @@ public sealed class WorkflowActionCatalog
             new StartTraceAction(commandRunner),
             new StopTraceAction(commandRunner),
             new CapturePacketsAction(commandRunner),
-            new SummarizeCaptureAction(commandRunner),
-            new ListCustomScriptsAction(customScriptsDirectory),
-            new RunCustomScriptAction(commandRunner, customScriptsDirectory)
+            new SummarizeCaptureAction(commandRunner)
         ];
     }
 

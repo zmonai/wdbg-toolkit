@@ -45,14 +45,6 @@ public static class ScenarioCatalog
                 "Install Wireshark, Npcap, and Sysinternals Suite for packet capture and network troubleshooting. Npcap is installed through Chocolatey.",
                 ScenarioAvailability.Planned),
             new(
-                "custom-logs",
-                "Custom logs",
-                "Bring together application logs and scenario-specific diagnostic scripts.",
-                ["PowerShell", "Custom log parsers"],
-                [],
-                "Prerequisites for custom log analysis have not been defined yet.",
-                ScenarioAvailability.Planned),
-            new(
                 "mcp-server",
                 "MCP Server",
                 "Run the wdbgmcp server so an MCP-compatible LLM client can read workflow run data collected by this toolkit.",

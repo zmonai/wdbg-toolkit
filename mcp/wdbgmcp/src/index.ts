@@ -22,7 +22,7 @@ server.registerTool(
   {
     title: "List diagnostic scenarios",
     description:
-      "Lists diagnostic scenario ids (e.g. crash, performance, networking, custom-logs) that have at least one recorded Windows Debug Toolkit workflow run.",
+      "Lists diagnostic scenario ids (e.g. crash, performance, networking) that have at least one recorded Windows Debug Toolkit workflow run.",
     inputSchema: {},
   },
   async () => {
@@ -43,7 +43,7 @@ server.registerTool(
       scenarioId: z
         .string()
         .optional()
-        .describe("Scenario id to filter by (e.g. 'crash', 'performance', 'networking', 'custom-logs'). Omit to list runs across all scenarios."),
+        .describe("Scenario id to filter by (e.g. 'crash', 'performance', 'networking'). Omit to list runs across all scenarios."),
     },
   },
   async ({ scenarioId }) => {

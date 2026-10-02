@@ -415,7 +415,6 @@ public partial class MainWindow : Window
             "crash" => "!",
             "performance" => "↗",
             "networking" => "⇄",
-            "custom-logs" => "≡",
             "mcp-server" => "⚙",
             _ => "·"
         };
