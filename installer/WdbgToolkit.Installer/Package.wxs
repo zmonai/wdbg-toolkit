@@ -8,6 +8,8 @@
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of Windows Debug Toolkit is already installed." />
     <MediaTemplate EmbedCab="yes" />
+    <Icon Id="WdtIcon" SourceFile="..\..\src\WdbgToolkit.App\Assets\Wdt.ico" />
+    <Property Id="ARPPRODUCTICON" Value="WdtIcon" />
 
     <Feature Id="Main">
       <ComponentGroupRef Id="ApplicationFiles" />
@@ -39,6 +41,8 @@
         Id="ApplicationShortcut"
         Name="Windows Debug Toolkit"
         Target="[INSTALLFOLDER]WdbgToolkit.App.exe"
+        Icon="WdtIcon"
+        IconIndex="0"
         WorkingDirectory="INSTALLFOLDER" />
       <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
       <RegistryValue

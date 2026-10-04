@@ -7,6 +7,7 @@ A Windows desktop foundation for guided crash, performance, and networking diagn
 ## Projects
 
 - `src/WdbgToolkit.App` — WPF desktop application.
+- `src/WdbgToolkit.App/Assets/Wdt.ico` — multi-resolution WDT icon used by the executable, window/taskbar, and MSI shortcut.
 - `src/WdbgToolkit.Core` — UI-independent diagnostic scenario contracts and catalog.
 - `src/WdbgToolkit.PackageManagement` — package-manager detection and explicit tool installation via WinGet or Chocolatey.
 - `src/WdbgToolkit.Workflows` — UI-independent per-scenario diagnostic actions (crash, performance, networking) with a shared run-manifest convention, reusable by the app and a future MCP server.
