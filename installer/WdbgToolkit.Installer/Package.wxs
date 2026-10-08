@@ -2,7 +2,7 @@
   <Package
     Name="Windows Debug Toolkit"
     Manufacturer="WdbgToolkit"
-    Version="1.1.1"
+    Version="1.0.0"
     UpgradeCode="844B7CF2-76DF-4DFB-9571-7A626422D7B8"
     Scope="perMachine">
 
