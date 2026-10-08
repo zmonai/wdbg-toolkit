@@ -1,0 +1,32 @@
+{
+  "name": "wdbgmcp",
+  "version": "0.1.0",
+  "description": "MCP server that runs diagnostic commands on a Windows Debug Toolkit machine and returns their output to AI clients.",
+  "type": "module",
+  "bin": {
+    "wdbgmcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:bundle": "npm run build && esbuild src/index.ts --bundle --platform=node --format=esm --target=node18 --outfile=bundle/index.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "start": "node dist/index.js",
+    "dev": "tsc -p tsconfig.json --watch",
+    "test": "node --test dist\\commandRunner.test.js dist\\server.test.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
