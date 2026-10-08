@@ -1,0 +1,62 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="Windows Debug Toolkit"
+    Manufacturer="WdbgToolkit"
+    Version="1.1.1"
+    UpgradeCode="844B7CF2-76DF-4DFB-9571-7A626422D7B8"
+    Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Windows Debug Toolkit is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="WdtIcon" SourceFile="..\..\src\WdbgToolkit.App\Assets\Wdt.ico" />
+    <Property Id="ARPPRODUCTICON" Value="WdtIcon" />
+
+    <Feature Id="Main">
+      <ComponentGroupRef Id="ApplicationFiles" />
+      <ComponentGroupRef Id="McpServerFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Windows Debug Toolkit" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="CommonStartMenuMicrosoft" Name="Microsoft">
+        <Directory Id="CommonStartMenuWindows" Name="Windows">
+          <Directory Id="CommonStartMenu" Name="Start Menu">
+            <Directory Id="CommonStartMenuPrograms" Name="Programs">
+              <Directory Id="ApplicationProgramsFolder" Name="Windows Debug Toolkit" />
+            </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <ComponentGroup Id="ApplicationFiles" Directory="INSTALLFOLDER">
+      <Files Include="!(bindpath.WdbgToolkit.App)\**" />
+    </ComponentGroup>
+
+    <ComponentGroup Id="McpServerFiles" Directory="INSTALLFOLDER">
+      <Files Include="!(bindpath.McpPayload)\**" />
+    </ComponentGroup>
+
+    <Component Id="StartMenuShortcut" Directory="ApplicationProgramsFolder">
+      <Shortcut
+        Id="ApplicationShortcut"
+        Name="Windows Debug Toolkit"
+        Target="[INSTALLFOLDER]WdbgToolkit.App.exe"
+        Icon="WdtIcon"
+        IconIndex="0"
+        WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+      <RegistryValue
+        Root="HKLM"
+        Key="Software\WdbgToolkit\WindowsDebugToolkit"
+        Name="Installed"
+        Type="integer"
+        Value="1"
+        KeyPath="yes" />
+    </Component>
+  </Package>
+</Wix>

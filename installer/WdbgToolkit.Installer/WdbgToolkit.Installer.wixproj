@@ -1,0 +1,33 @@
+<Project Sdk="WixToolset.Sdk/6.0.2">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WdbgToolkit.App\WdbgToolkit.App.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <McpSourceDirectory>$(MSBuildThisFileDirectory)..\..\mcp\wdbgmcp</McpSourceDirectory>
+    <McpPayloadDirectory>$(MSBuildThisFileDirectory)obj\$(Configuration)\mcp-payload</McpPayloadDirectory>
+  </PropertyGroup>
+
+  <Target Name="PrepareMcpPayload" BeforeTargets="CoreCompile">
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(McpSourceDirectory)" />
+    <Exec Command="npm run build:bundle" WorkingDirectory="$(McpSourceDirectory)" />
+    <RemoveDir Directories="$(McpPayloadDirectory)" />
+    <MakeDir Directories="$(McpPayloadDirectory)\mcp\wdbgmcp\dist" />
+    <ItemGroup>
+      <McpRuntimeFiles Include="$(McpSourceDirectory)\bundle\index.js" />
+      <McpPackageFiles Include="$(McpSourceDirectory)\package.json" />
+      <McpLicenseFiles Include="$(McpSourceDirectory)\node_modules\**\LICENSE*;$(McpSourceDirectory)\node_modules\**\license*"
+                       Exclude="$(McpSourceDirectory)\node_modules\.cache\**" />
+    </ItemGroup>
+    <Copy SourceFiles="@(McpRuntimeFiles)" DestinationFolder="$(McpPayloadDirectory)\mcp\wdbgmcp\dist" />
+    <Copy SourceFiles="@(McpPackageFiles)" DestinationFolder="$(McpPayloadDirectory)\mcp\wdbgmcp" />
+    <Copy SourceFiles="@(McpLicenseFiles)"
+          DestinationFiles="@(McpLicenseFiles->'$(McpPayloadDirectory)\mcp\wdbgmcp\licenses\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <ItemGroup>
+      <BindPath Include="$(McpPayloadDirectory)" BindName="McpPayload" />
+    </ItemGroup>
+  </Target>
+
+</Project>
