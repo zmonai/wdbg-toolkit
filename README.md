@@ -42,6 +42,35 @@ The app displays diagnostic scenarios and host OS/.NET information and installs 
 
 The MSI is generated at `installer\WdbgToolkit.Installer\bin\Release\WdbgToolkit.Installer.msi`. It installs the desktop app under Program Files and creates an all-users Start Menu shortcut. It also ships `mcp\wdbgmcp\dist\index.js`, bundled with its JavaScript dependencies, and its package metadata. No npm install is needed on the target machine. Building the MSI requires Node.js/npm and downloads locked build dependencies using `npm ci`. The app is currently framework-dependent, so installing or running it requires the matching .NET 10 Windows Desktop Runtime. Node.js is still required to run the MCP server and can be installed through the MCP Server prerequisites or Debug Machine Setup. The MSI does not install .NET, Node.js, WinGet, Chocolatey, or any diagnostic tools. Update the MSI `Package` version when releasing a new version; the stable upgrade code enables major upgrades.
 
+### Signing (self-signed)
+
+`scripts\Sign-Release.ps1` builds the app, signs every first-party `.exe` and `.dll`,
+packages those signed binaries into the MSI, then signs and verifies the MSI. It
+requires `signtool.exe` from the Windows SDK.
+
+```powershell
+.\scripts\Sign-Release.ps1
+```
+
+The script reuses a valid `CN=Windows Debug Toolkit (Self-Signed)` code-signing
+certificate from `Cert:\CurrentUser\My`, or creates a 3-year RSA-3072 certificate.
+It exports the public certificate to `artifacts\signing\WdbgToolkit-CodeSigning.cer`
+and timestamps signatures with `http://timestamp.digicert.com`.
+
+| Option | Purpose |
+| --- | --- |
+| `-CertificateThumbprint <sha1>` | Sign with a specific certificate from `Cert:\CurrentUser\My`. |
+| `-PfxPassword (Read-Host -AsSecureString)` | Create an exportable key and write `WdbgToolkit-CodeSigning.pfx` for use on another build machine. Never commit or share it. |
+| `-TrustCertificate` | Elevated only: trust the certificate in Local Machine Root and Trusted Publishers. |
+| `-NoTimestamp` / `-TimestampUrl <url>` | Disable or change the RFC 3161 timestamp server. |
+| `-SkipBuild` | Sign existing app output without rebuilding it. |
+
+Self-signed signatures prove that files have not changed since signing, but Windows
+and SmartScreen do not trust them by default. Use them only for internal or test
+distribution. To trust them on a test machine, import the `.cer` file into **Local
+Machine > Trusted Root Certification Authorities** and **Trusted Publishers**. Use a
+certificate from a trusted code-signing authority for public releases.
+
 ## Package management library
 
 The left-hand **Package Manager Setup** section installs Chocolatey through WinGet
