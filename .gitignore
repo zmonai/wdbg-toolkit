@@ -2,6 +2,10 @@
 **/bin/
 **/obj/
 
+## Signing artifacts and private keys
+artifacts/
+*.pfx
+
 ## Visual Studio
 .vs/
 *.user
