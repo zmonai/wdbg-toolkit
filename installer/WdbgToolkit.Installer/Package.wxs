@@ -2,7 +2,7 @@
   <Package
     Name="Windows Debug Toolkit"
     Manufacturer="WdbgToolkit"
-    Version="1.0.0"
+    Version="1.0.1"
     UpgradeCode="844B7CF2-76DF-4DFB-9571-7A626422D7B8"
     Scope="perMachine">
 
@@ -15,6 +15,7 @@
       <ComponentGroupRef Id="ApplicationFiles" />
       <ComponentGroupRef Id="McpServerFiles" />
       <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="McpServiceCleanup" />
     </Feature>
 
     <StandardDirectory Id="ProgramFiles64Folder">
@@ -22,6 +23,7 @@
     </StandardDirectory>
 
     <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="McpServiceDataFolder" Name="WdbgToolkit.McpService" />
       <Directory Id="CommonStartMenuMicrosoft" Name="Microsoft">
         <Directory Id="CommonStartMenuWindows" Name="Windows">
           <Directory Id="CommonStartMenu" Name="Start Menu">
@@ -36,6 +38,15 @@
     <ComponentGroup Id="ApplicationFiles" Directory="INSTALLFOLDER">
       <Files Include="!(bindpath.WdbgToolkit.App)\**" />
     </ComponentGroup>
+
+    <Component Id="McpServiceCleanup" Directory="McpServiceDataFolder">
+      <ServiceControl Id="McpServiceControl" Name="WdbgToolkitMcp"
+                      Stop="both" Remove="uninstall" Wait="yes" />
+      <RemoveFile Id="RemoveMcpServiceSettings" Name="settings.json" On="uninstall" />
+      <RemoveFolder Id="RemoveMcpServiceDataFolder" On="uninstall" />
+      <RegistryValue Root="HKLM" Key="Software\WdbgToolkit\WindowsDebugToolkit"
+                     Name="McpServiceCleanup" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
 
     <ComponentGroup Id="McpServerFiles" Directory="INSTALLFOLDER">
       <Files Include="!(bindpath.McpPayload)\**" />

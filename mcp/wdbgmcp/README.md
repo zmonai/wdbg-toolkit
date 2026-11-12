@@ -93,7 +93,7 @@ Prerequisites:
    approve the Windows UAC prompt. Stop any already-running server before switching.
    Commands from an elevated server have administrator rights.
 4. In the toolkit app, copy the **VS Code `mcp.json`** connection snippet. It
-   contains the host URL and a per-app-instance bearer token. Do not share or
+   contains the host URL and a bearer token. Do not share or
    commit the token.
 5. In VS Code, run **MCP: Open User Configuration** from the Command Palette, or
    add the server to the workspace's `.vscode/mcp.json`. Merge the copied `wdbgmcp`
@@ -125,11 +125,37 @@ the URL supplied by the app as-is; `localhost` may be used only if the client an
 server are on that same machine. The app verifies its token against the local
 endpoint before reporting that the server started.
 
+### Run automatically after reboot
+
+In the MCP Server panel, check **Run as a Windows service**, then choose **Start as
+admin** and confirm. Use the MSI-installed toolkit and machine-wide Node.js at
+`%ProgramFiles%\nodejs\node.exe`. The `WdbgToolkitMcp` service runs without a signed-in
+user and stays running when the toolkit closes. Windows starts it automatically
+after reboot and restarts it after an unexpected MCP process exit.
+
+**Service commands run as LocalSystem with full system privileges.** They do not
+run in your desktop session and cannot rely on mapped drives, per-user installations,
+or your interactive credentials. Prefer standard-user mode unless this persistent
+privileged access is necessary.
+
+Service connection details use a persistent token stored in
+`%ProgramData%\WdbgToolkit.McpService\settings.json`, restricted to Administrators
+and SYSTEM. After reopening the toolkit, use **Manage as admin** to view it.
+**Stop server** stops the service until reboot or an explicit start.
+**Remove service** stops it, disables automatic startup, and deletes the token;
+reinstalling creates a new token. Remove the service before uninstalling, moving,
+or upgrading the toolkit or Node.js. **Refresh status** reloads its current state.
+MSI uninstall and major upgrades also remove the service and token; explicitly
+enable service mode again after upgrading and update the client token.
+The machine's IP may change after reboot; use stable addressing if needed.
+Service mode does not change firewall rules or encrypt HTTP.
+
 ### Keep the connection secure
 
-- The token changes when the toolkit app is relaunched, and differs between
+- In app-owned mode, the token changes when the toolkit app is relaunched, and differs between
   standard-user and elevated app instances. Copy fresh details from the same app
-  instance that started the server.
+  instance that started the server. Service mode preserves its token across reboots;
+  remove and reinstall the service to rotate it.
 - Treat the token like a password: anyone who has it can invoke remote commands.
   Do not paste it into chat, source control, screenshots, or logs.
 - The HTTP endpoint listens on all network interfaces (`0.0.0.0`). A bearer token
@@ -145,7 +171,8 @@ endpoint before reporting that the server started.
 Stop and restart the server from the toolkit app, copy its current VS Code snippet,
 and replace the complete `wdbgmcp` entry in the active VS Code MCP configuration.
 Check that the request uses the copied `headers.Authorization` value and the URL
-ends in `/mcp`. Relaunching the toolkit changes the token.
+ends in `/mcp`. Relaunching the toolkit changes the token only in app-owned mode.
+For service mode, copy the existing service token from an elevated toolkit window.
 
 ### “Failed to fetch authorization server metadata” or an `/authorize` page
 

@@ -60,7 +60,12 @@ public sealed class McpServerManager : IDisposable
     public int? ProcessId => IsRunning ? _process!.Id : null;
 
     public int Port { get; private set; } = DefaultPort;
-    public string ConnectionToken { get; } = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+    public string ConnectionToken { get; }
+
+    public McpServerManager(string? connectionToken = null)
+    {
+        ConnectionToken = connectionToken ?? Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+    }
 
     public event EventHandler? Exited;
 
@@ -112,7 +117,7 @@ public sealed class McpServerManager : IDisposable
     /// throws with the captured stderr output so the caller can show a clear reason instead
     /// of a silent "not running" state.
     /// </summary>
-    public async Task StartAsync(string entryPointPath, int port)
+    public async Task StartAsync(string entryPointPath, int port, string nodePath = "node")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(entryPointPath);
 
@@ -128,7 +133,8 @@ public sealed class McpServerManager : IDisposable
 
         var startInfo = new ProcessStartInfo
         {
-            FileName = "node",
+            FileName = nodePath,
+            WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(entryPointPath))!,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardInput = true,
@@ -189,21 +195,39 @@ public sealed class McpServerManager : IDisposable
 
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ConnectionToken);
-            using var response = await client.GetAsync($"http://127.0.0.1:{port}{McpPath}").ConfigureAwait(true);
-            // The authenticated stateless endpoint returns 405 for GET.
-            if (response.StatusCode != HttpStatusCode.MethodNotAllowed)
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (true)
             {
-                throw new InvalidOperationException(
-                    $"MCP connection verification failed (HTTP {(int)response.StatusCode}). " +
-                    "Another server may be using this port with a different token. Stop that server and start this one before copying connection details.");
+                try
+                {
+                    await VerifyEndpointAsync(port, ConnectionToken).ConfigureAwait(true);
+                    break;
+                }
+                catch (HttpRequestException) when (!process.HasExited && DateTime.UtcNow < deadline)
+                {
+                    // Boot-time CPU/disk contention can delay Node binding its socket.
+                    await Task.Delay(200).ConfigureAwait(true);
+                }
             }
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
             await StopAsync().ConfigureAwait(true);
             throw new InvalidOperationException($"Could not verify the MCP endpoint: {exception.Message}", exception);
+        }
+    }
+
+    public static async Task VerifyEndpointAsync(int port, string token)
+    {
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var response = await client.GetAsync($"http://127.0.0.1:{port}{McpPath}").ConfigureAwait(false);
+        // The authenticated stateless endpoint returns 405 for GET.
+        if (response.StatusCode != HttpStatusCode.MethodNotAllowed)
+        {
+            throw new InvalidOperationException(
+                $"MCP connection verification failed (HTTP {(int)response.StatusCode}). " +
+                "Another server may be using this port with a different token. Stop that server before starting this one.");
         }
     }
 
@@ -314,9 +338,16 @@ public sealed class McpServerManager : IDisposable
     /// <c>mcpServers</c> schema used by Claude Desktop, Cursor, and most other MCP
     /// clients, so both are included, each ready to paste as-is.
     /// </summary>
-    public static string BuildConnectionDetails(int port, string token)
+    public static string BuildConnectionDetails(int port, string token, bool isService = false)
     {
         var url = $"http://{ResolveMachineAddress()}:{port}{McpPath}";
+        var lifetime = isService
+            ? "The Windows service runs as LocalSystem, independently of the app, and starts automatically after reboot.\n" +
+              "The token persists across app restarts and reboots. Remove the service to revoke it before reinstalling.\n" +
+              "Clients with this token can execute commands as LocalSystem."
+            : "The Windows Debug Toolkit app must remain open with the MCP server started.\n" +
+              "The token changes when the app is relaunched; copy the updated configuration then.\n" +
+              "Clients with this token can execute commands with the app's permissions.";
 
         return $$"""
             VS Code (and other editors using the MCP "mcp.json" schema)
@@ -350,11 +381,9 @@ public sealed class McpServerManager : IDisposable
               }
             }
 
-            Note: the Windows Debug Toolkit app must be running with the MCP server started
-            (see the buttons above) for this URL to be reachable. The machine's firewall must
-            allow inbound connections on port {{port}} for a remote client to connect.
-            Keep this token private: clients with it can execute commands with the app's permissions.
-            The token changes when the app is relaunched; copy the updated configuration then.
+            {{lifetime}}
+            The machine's firewall must allow inbound connections on port {{port}} for a remote client to connect.
+            Keep this token private.
             Use HTTP only on a trusted network. For untrusted networks use a TLS proxy or secure tunnel.
             """;
     }

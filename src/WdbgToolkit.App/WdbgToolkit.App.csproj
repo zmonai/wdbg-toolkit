@@ -13,9 +13,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\Wdt.ico</ApplicationIcon>
+    <StartupObject>WdbgToolkit.App.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.0" />
     <Resource Include="Assets\Wdt.ico" />
   </ItemGroup>
 

@@ -401,6 +401,13 @@
                                            FontSize="11"
                                            LineHeight="16"
                                            TextWrapping="Wrap" />
+                                <CheckBox x:Name="RunMcpAsServiceCheckBox"
+                                          Checked="RunMcpAsServiceCheckBox_Changed"
+                                          Unchecked="RunMcpAsServiceCheckBox_Changed"
+                                          Margin="0,10,0,0">
+                                    <TextBlock Text="Run as a Windows service (admin only; starts after reboot and keeps running when this app closes)"
+                                               TextWrapping="Wrap" />
+                                </CheckBox>
                                 <WrapPanel Margin="0,12,0,0">
                                     <Button x:Name="StartMcpServerButton"
                                             Content="Start server"
@@ -430,6 +437,17 @@
                                             BorderThickness="1"
                                             Foreground="{StaticResource InkBrush}"
                                             FontWeight="SemiBold" />
+                                </WrapPanel>
+                                <WrapPanel Margin="0,8,0,0">
+                                    <Button x:Name="RemoveMcpServiceButton"
+                                            Content="Remove service"
+                                            Padding="14,8"
+                                            Visibility="Collapsed"
+                                            Click="RemoveMcpServiceButton_Click" />
+                                    <Button Content="Refresh status"
+                                            Margin="10,0,0,0"
+                                            Padding="14,8"
+                                            Click="RefreshMcpStatusButton_Click" />
                                 </WrapPanel>
                                 <TextBlock Text="Add to your MCP client config (VS Code mcp.json and Claude/Cursor-style mcpServers)"
                                            Margin="0,14,0,6"
