@@ -132,6 +132,32 @@ original window closes once the elevated process launches. Copy fresh connection
 details from the elevated window because its token is different. Stop any running
 server before changing permissions. Cancelling UAC leaves the original app open.
 
+To keep MCP available after closing the app or rebooting, check **Run as a Windows
+service** before choosing **Start as admin**, then confirm service installation in
+the elevated window. This requires the MSI-installed toolkit and machine-wide
+Node.js at `%ProgramFiles%\nodejs\node.exe`; development builds and per-user Node
+installations are intentionally not supported for service mode.
+
+The `WdbgToolkitMcp` Windows service runs as **LocalSystem**, starts automatically
+without signing in after reboot, and restarts after unexpected MCP process exits.
+This grants connected AI clients full system privileges, not just access to your
+interactive account. Commands run in a non-interactive service session; mapped
+drives, per-user tools, and your user credentials are not available. Firewall and
+TLS/tunnel requirements are unchanged; no firewall rules are added.
+
+The service's token and absolute runtime paths are stored in
+`%ProgramData%\WdbgToolkit.McpService\settings.json`, accessible only to Administrators
+and SYSTEM. Its token persists across app restarts and reboots. Reopen the toolkit,
+select MCP Server, and use **Manage as admin** to copy service connection details
+or manage the service. **Refresh status** reloads external service changes.
+**Stop server** stops it until the next reboot or explicit start; **Remove service**
+stops and unregisters it and deletes its token. Remove it before uninstalling,
+moving, or upgrading the toolkit or Node.js, then enable it again afterward.
+Removing and reinstalling generates a new token; update your MCP client configuration.
+MSI uninstall (including major upgrades) also stops/removes the service and deletes
+its saved token; service mode must be explicitly enabled again after an upgrade.
+The host's LAN IP may change after reboot; use a stable address/DNS name if needed.
+
 ## Product direction
 
 - Provision diagnostic tools through explicit, user-confirmed WinGet or Chocolatey operations.

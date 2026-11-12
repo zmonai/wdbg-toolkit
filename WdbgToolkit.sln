@@ -21,6 +21,8 @@ Project("{B7DD6F7E-DEF8-4E67-B5B7-07EF123DB6F0}") = "WdbgToolkit.Installer", "in
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WdbgToolkit.Workflows", "src\WdbgToolkit.Workflows\WdbgToolkit.Workflows.csproj", "{D95DF62D-5DA1-435A-AB04-0E61307B9029}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WdbgToolkit.App.Tests", "tests\WdbgToolkit.App.Tests\WdbgToolkit.App.Tests.csproj", "{43291D28-423A-45D9-9CA6-7AE15AC76605}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -103,6 +105,18 @@ Global
 		{D95DF62D-5DA1-435A-AB04-0E61307B9029}.Release|x64.Build.0 = Release|Any CPU
 		{D95DF62D-5DA1-435A-AB04-0E61307B9029}.Release|x86.ActiveCfg = Release|Any CPU
 		{D95DF62D-5DA1-435A-AB04-0E61307B9029}.Release|x86.Build.0 = Release|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Debug|x64.Build.0 = Debug|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Debug|x86.Build.0 = Debug|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Release|Any CPU.Build.0 = Release|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Release|x64.ActiveCfg = Release|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Release|x64.Build.0 = Release|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Release|x86.ActiveCfg = Release|Any CPU
+		{43291D28-423A-45D9-9CA6-7AE15AC76605}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -114,5 +128,6 @@ Global
 		{EBDF720A-696B-4DE8-91AC-742EA6313693} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{1E3F1D64-9A28-4D55-B625-8F80A3AA7C26} = {1860D2E4-5C43-71D5-59A5-599A4DE1DF67}
 		{D95DF62D-5DA1-435A-AB04-0E61307B9029} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{43291D28-423A-45D9-9CA6-7AE15AC76605} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

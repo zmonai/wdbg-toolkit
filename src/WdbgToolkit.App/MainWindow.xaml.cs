@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Security.Principal;
+using System.ServiceProcess;
 using System.Windows;
 using System.Windows.Controls;
 using WdbgToolkit.Core;
@@ -49,7 +50,10 @@ public partial class MainWindow : Window
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         await RefreshPackageManagersAsync();
-        if (Environment.GetCommandLineArgs().Contains("--start-mcp-admin", StringComparer.Ordinal))
+        var args = Environment.GetCommandLineArgs();
+        var startService = args.Contains("--start-mcp-service", StringComparer.Ordinal);
+        var manageService = args.Contains("--manage-mcp-service", StringComparer.Ordinal);
+        if (startService || manageService || args.Contains("--start-mcp-admin", StringComparer.Ordinal))
         {
             using var identity = WindowsIdentity.GetCurrent();
             if (!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))
@@ -61,7 +65,11 @@ public partial class MainWindow : Window
 
             ScenarioList.SelectedItem = ScenarioList.Items.Cast<ScenarioListItem>()
                 .Single(item => item.Scenario.Id == McpServerScenarioId);
-            await StartMcpServerAsync();
+            RunMcpAsServiceCheckBox.IsChecked = startService || manageService;
+            if (!manageService)
+            {
+                await StartMcpServerAsync(startService);
+            }
         }
     }
 
@@ -375,6 +383,53 @@ public partial class MainWindow : Window
 
     private void RefreshMcpServerUi()
     {
+        try
+        {
+            RefreshMcpServerState();
+        }
+        catch (Exception exception)
+        {
+            McpServerStatus.Text = $"Could not read MCP status: {exception.Message}";
+            McpServerDetails.Text = string.Empty;
+            CopyMcpServerDetailsButton.IsEnabled = false;
+            StartMcpServerButton.IsEnabled = false;
+            StartMcpServerAsAdminButton.IsEnabled = false;
+            StopMcpServerButton.IsEnabled = false;
+            RemoveMcpServiceButton.IsEnabled = !_mcpServerBusy && McpServiceManager.IsAdministrator &&
+                RemoveMcpServiceButton.Visibility == Visibility.Visible;
+        }
+    }
+
+    private void RefreshMcpServerState()
+    {
+        var serviceStatus = McpServiceManager.GetStatus();
+        var serviceInstalled = serviceStatus is not null;
+        RemoveMcpServiceButton.Visibility = serviceInstalled ? Visibility.Visible : Visibility.Collapsed;
+        RemoveMcpServiceButton.IsEnabled = !_mcpServerBusy && McpServiceManager.IsAdministrator;
+        RunMcpAsServiceCheckBox.IsEnabled = !_mcpServerBusy && !serviceInstalled && !_mcpServerManager.IsRunning;
+        StartMcpServerAsAdminButton.Content = serviceInstalled && !McpServiceManager.IsAdministrator
+            ? "Manage as admin" : "Start as admin";
+        if (serviceInstalled)
+        {
+            var running = serviceStatus == ServiceControllerStatus.Running;
+            var admin = McpServiceManager.IsAdministrator;
+            McpServerStatus.Text = $"Windows service: {serviceStatus} (LocalSystem). Starts automatically after reboot and runs independently of this app. " +
+                (admin ? "Stop pauses it until reboot; Remove service disables automatic startup and revokes its token."
+                    : "Use Manage as admin to view the connection token, start, stop, or remove the service.");
+            McpServerDetails.Text = string.Empty;
+            if (running && admin)
+            {
+                var settings = McpServiceManager.LoadSettings();
+                McpServerDetails.Text = McpServerManager.BuildConnectionDetails(settings.Port, settings.Token, isService: true);
+            }
+            CopyMcpServerDetailsButton.IsEnabled = running && admin;
+            StartMcpServerButton.IsEnabled = false;
+            StartMcpServerAsAdminButton.IsEnabled = !_mcpServerBusy &&
+                (!admin || serviceStatus == ServiceControllerStatus.Stopped);
+            StopMcpServerButton.IsEnabled = !_mcpServerBusy && admin && running;
+            return;
+        }
+
         var entryPoint = McpServerManager.ResolveServerEntryPoint();
         if (entryPoint is null)
         {
@@ -408,7 +463,7 @@ public partial class MainWindow : Window
         else
         {
             McpServerStatus.Text = "Stopped. Start this server first, then copy its verified connection details into your MCP client. Details from another toolkit instance will use a different token.";
-            StartMcpServerButton.IsEnabled = !_mcpServerBusy;
+            StartMcpServerButton.IsEnabled = !_mcpServerBusy && RunMcpAsServiceCheckBox.IsChecked != true;
             StopMcpServerButton.IsEnabled = false;
         }
     }
@@ -418,6 +473,8 @@ public partial class MainWindow : Window
         await StartMcpServerAsync();
     }
 
+    private void RunMcpAsServiceCheckBox_Changed(object sender, RoutedEventArgs e) => RefreshMcpServerUi();
+
     private async void StartMcpServerAsAdminButton_Click(object sender, RoutedEventArgs e)
     {
         if (_mcpServerBusy || _mcpServerManager.IsRunning)
@@ -425,15 +482,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        using var identity = WindowsIdentity.GetCurrent();
-        if (new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))
+        var asService = RunMcpAsServiceCheckBox.IsChecked == true;
+        if (McpServiceManager.IsAdministrator)
         {
-            await StartMcpServerAsync();
+            await StartMcpServerAsync(asService || RemoveMcpServiceButton.Visibility == Visibility.Visible);
             return;
         }
 
         if (MessageBox.Show(this,
-                "Relaunch Windows Debug Toolkit as administrator and start the MCP server? Windows will request UAC approval. AI commands will have administrator access to this machine. This window will close after the elevated app launches; copy new connection details from that app.",
+                "Relaunch Windows Debug Toolkit as administrator to start or manage MCP? Windows will request UAC approval. AI commands will have administrator access (LocalSystem for service mode). This window will close after the elevated app launches; use connection details from that app.",
                 "Start MCP as administrator", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
         {
             return;
@@ -454,7 +511,8 @@ public partial class MainWindow : Window
             {
                 startInfo.ArgumentList.Add(typeof(MainWindow).Assembly.Location);
             }
-            startInfo.ArgumentList.Add("--start-mcp-admin");
+            startInfo.ArgumentList.Add(RemoveMcpServiceButton.Visibility == Visibility.Visible
+                ? "--manage-mcp-service" : asService ? "--start-mcp-service" : "--start-mcp-admin");
             using var elevated = Process.Start(startInfo) ??
                 throw new InvalidOperationException("The elevated toolkit process was not created.");
             Close();
@@ -469,7 +527,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task StartMcpServerAsync()
+    private async Task StartMcpServerAsync(bool asService = false)
     {
         if (_mcpServerBusy)
         {
@@ -477,7 +535,7 @@ public partial class MainWindow : Window
         }
 
         var entryPoint = McpServerManager.ResolveServerEntryPoint();
-        if (entryPoint is null)
+        if (entryPoint is null && !asService)
         {
             RefreshMcpServerUi();
             return;
@@ -485,7 +543,9 @@ public partial class MainWindow : Window
 
         if (MessageBox.Show(
                 this,
-                "Starting wdbgmcp lets AI clients with the connection token execute commands on this machine, including commands that modify files or settings. Commands inherit this app's permissions (administrator if elevated).\n\nOnly share the token with trusted clients. HTTP is unencrypted: use a trusted network or a secure tunnel/TLS proxy.\n\nStart the server?",
+                asService
+                    ? "Install or start the MCP Windows service? It runs as LocalSystem, starts automatically after every reboot without signing in, and keeps running after this app closes. Authenticated AI clients can execute commands with full system privileges.\n\nThe connection token is stored under ProgramData with access restricted to Administrators and SYSTEM and persists across reboots. Use Remove service to revoke access and disable startup. HTTP is unencrypted: restrict the firewall to trusted clients or use a secure tunnel/TLS proxy."
+                    : "Starting wdbgmcp lets AI clients with the connection token execute commands on this machine, including commands that modify files or settings. Commands inherit this app's permissions (administrator if elevated).\n\nOnly share the token with trusted clients. HTTP is unencrypted: use a trusted network or a secure tunnel/TLS proxy.\n\nStart the server?",
                 "Allow MCP command execution",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning) != MessageBoxResult.Yes)
@@ -498,10 +558,23 @@ public partial class MainWindow : Window
         StartMcpServerButton.IsEnabled = false;
         StartMcpServerAsAdminButton.IsEnabled = false;
         StopMcpServerButton.IsEnabled = false;
+        RunMcpAsServiceCheckBox.IsEnabled = false;
+        RemoveMcpServiceButton.IsEnabled = false;
         string? startupError = null;
         try
         {
-            await _mcpServerManager.StartAsync(entryPoint);
+            if (asService)
+            {
+                await McpServiceManager.InstallAndStartAsync(entryPoint);
+            }
+            else
+            {
+                if (McpServiceManager.GetStatus() is not null)
+                {
+                    throw new InvalidOperationException("An MCP service is installed. Manage or remove it before starting an app-owned server.");
+                }
+                await _mcpServerManager.StartAsync(entryPoint!);
+            }
         }
         catch (Exception exception)
         {
@@ -530,13 +603,23 @@ public partial class MainWindow : Window
         McpServerStatus.Text = "Stopping wdbgmcp...";
         StartMcpServerButton.IsEnabled = false;
         StopMcpServerButton.IsEnabled = false;
+        StartMcpServerAsAdminButton.IsEnabled = false;
+        RemoveMcpServiceButton.IsEnabled = false;
+        string? stopError = null;
         try
         {
-            await _mcpServerManager.StopAsync();
+            if (McpServiceManager.GetStatus() is not null)
+            {
+                await McpServiceManager.StopAsync();
+            }
+            else
+            {
+                await _mcpServerManager.StopAsync();
+            }
         }
         catch (Exception exception)
         {
-            McpServerStatus.Text = $"Could not stop wdbgmcp cleanly: {exception.Message}";
+            stopError = $"Could not stop wdbgmcp cleanly: {exception.Message}";
         }
         finally
         {
@@ -544,6 +627,48 @@ public partial class MainWindow : Window
         }
 
         RefreshMcpServerUi();
+        if (stopError is not null)
+        {
+            McpServerStatus.Text = stopError;
+        }
+    }
+
+    private void RefreshMcpStatusButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_mcpServerBusy)
+        {
+            RefreshMcpServerUi();
+        }
+    }
+
+    private async void RemoveMcpServiceButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_mcpServerBusy || MessageBox.Show(this,
+                "Stop and remove the MCP Windows service, disable its automatic startup, and delete its saved connection token?",
+                "Remove MCP service", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+        _mcpServerBusy = true;
+        RefreshMcpServerUi();
+        string? error = null;
+        try
+        {
+            await McpServiceManager.RemoveAsync();
+        }
+        catch (Exception exception)
+        {
+            error = $"Could not remove the MCP service: {exception.Message}";
+        }
+        finally
+        {
+            _mcpServerBusy = false;
+        }
+        RefreshMcpServerUi();
+        if (error is not null)
+        {
+            McpServerStatus.Text = error;
+        }
     }
 
     private void McpServerManager_Exited(object? sender, EventArgs e)
