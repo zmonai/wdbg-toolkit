@@ -22,6 +22,7 @@ const tools = [
   { path: "/delete_function", method: "POST", read_only: false, destructive: true, description: "Delete", params: [] },
   { path: "/read_json", method: "POST", read_only: true, description: "Example JSON parameters",
     params: [param("options", "json", true, "body"), param("value", "any", false, "body")] },
+  { path: "/server/status", method: "GET", read_only: true, description: "Nested path served by live backends", params: [] },
 ];
 
 async function backend(t: TestContext, handler?: (req: IncomingMessage, res: ServerResponse) => void) {
@@ -75,6 +76,7 @@ test("Ghidra rejects mutations, unsupported tools, unknown parameters and invali
   await assert.rejects(client.call("delete_function", {}), /read-only/);
   await assert.rejects(client.call("../execute_script", {}), /Invalid/);
   await assert.rejects(client.call("missing", {}), /not advertised/);
+  assert.ok(!(await client.catalog()).some((tool) => tool.path === "/server/status"));
   await assert.rejects(client.call("search_strings", { program: "/old/a.exe" }), /Missing required/);
   await assert.rejects(client.call("search_strings", { program: "/old/a.exe", search_term: "x", invented: "y" }), /Unknown parameter/);
   await assert.rejects(client.call("get_function_hash", { program: "/old/a.exe", limit: 0 }), /between 1 and 500/);
