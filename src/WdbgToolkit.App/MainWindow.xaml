@@ -401,6 +401,23 @@
                                            FontSize="11"
                                            LineHeight="16"
                                            TextWrapping="Wrap" />
+                                <GroupBox Header="Optional requirement: SSH remote access" Margin="0,12,0,0">
+                                    <StackPanel Margin="8">
+                                        <TextBlock Text="Not required for MCP or Ghidra. Administrator-only setup opens TCP 22 to supplied clients and starts sshd automatically after reboot. Existing SSH authentication and other firewall rules are unchanged."
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Text="Allowed client IPs/CIDRs (comma-separated; no default)" Margin="0,8,0,4" />
+                                        <TextBox x:Name="SshAllowedClients" />
+                                        <WrapPanel Margin="0,8,0,0">
+                                            <Button x:Name="EnableSshButton" Content="Install and enable SSH" Click="EnableSshButton_Click" Padding="8,5" />
+                                            <Button x:Name="DisableSshButton" Content="Disable SSH" Click="DisableSshButton_Click" Padding="8,5" Margin="8,0,0,0" />
+                                            <Button x:Name="RefreshSshButton" Content="SSH status" Click="RefreshSshButton_Click" Padding="8,5" Margin="8,0,0,0" />
+                                        </WrapPanel>
+                                        <TextBox x:Name="SshSetupStatus" IsReadOnly="True" TextWrapping="Wrap"
+                                                 MaxHeight="180" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0" />
+                                    </StackPanel>
+                                </GroupBox>
+                                <TextBlock Margin="0,12,0,0" TextWrapping="Wrap"
+                                           Text="Optional Ghidra tools: install Ghidra at C:\dbg\ghidra, a compatible 64-bit JDK, and the Ghidra MCP backend yourself on this machine. Start the backend on loopback port 8089 before using Ghidra tools. SSH is not required." />
                                 <CheckBox x:Name="RunMcpAsServiceCheckBox"
                                           Checked="RunMcpAsServiceCheckBox_Changed"
                                           Unchecked="RunMcpAsServiceCheckBox_Changed"

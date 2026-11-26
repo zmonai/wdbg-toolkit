@@ -22,11 +22,38 @@ output.
 
 ## What it can do
 
-The server exposes exactly one MCP tool:
+The server exposes these MCP tools:
 
 | Tool | Capability |
 | --- | --- |
 | `execute_command` | Starts an executable on the server machine and returns its stdout, stderr, exit code, signal, duration, and timeout/output-limit/cancellation status. |
+| `configure_windows_ssh` | Inspects SSH status or, after explicit confirmation, installs/enables or disables Windows SSH remote access. |
+| `ghidra_status` | Checks the Ghidra installation, backend schema, and open programs. |
+| `ghidra_list_tools` | Discovers read-only backend features and their parameters. |
+| `ghidra_search_strings` | Searches defined strings by regex with pagination. |
+| `ghidra_list_items` | Lists methods/functions, imports, exports, classes, namespaces, segments, and data. |
+| `ghidra_decompile` | Returns inferred C-like pseudocode and backend warnings for one function. |
+| `ghidra_disassemble` | Reads existing assembly for one function. |
+| `ghidra_xrefs` | Lists references to/from an address. |
+| `ghidra_call_tool` | Calls other advertised non-destructive read-only backend tools, including function hashes, byte/instruction searches, and symbol/memory inspection. |
+| `ghidra_import` | Imports a backend-local file after explicit confirmation, optionally starting analysis; never executes it. |
+
+SSH is optional, not required for MCP or headless Ghidra. For `configure_windows_ssh`,
+`action: "status"` makes no configuration changes. `action: "install_enable"`
+requires `confirmed: true`, administrator privileges, and a nonempty
+`allowedClients` array of explicit IP addresses/CIDRs; no network default exists.
+It installs the Windows OpenSSH Server capability if sshd is missing, enables
+automatic startup, creates a toolkit TCP 22 firewall rule for those clients, and
+disables the known Windows default `OpenSSH-Server-In-TCP` rule. Existing SSH
+authentication and unrelated firewall rules remain unchanged; review them
+separately. No credentials, SSH keys, or alternate MSI are installed.
+
+`action: "disable"` requires confirmation and administrator privileges; it stops
+sshd, disables startup, and disables the toolkit firewall rule, without uninstalling
+SSH. Setup failures/timeouts may leave partial changes. Check status before retrying;
+Windows capability installation may require servicing sources or a manual reboot.
+The toolkit MSI includes the shared PowerShell setup script. Standalone npm
+installations must retain the package's `scripts` directory alongside `dist`.
 
 For example, an AI client can run an installed diagnostic utility such as `ipconfig`,
 `cdb`, `wpr`, `dumpcap`, or PowerShell, then analyze the returned text. Use the
@@ -118,7 +145,8 @@ Prerequisites:
    must end in `/mcp`; the `Authorization` value must start with `Bearer `.
 6. Save the configuration, then start or restart `wdbgmcp` in VS Code's MCP
    server controls. Inspect the available MCP tools; `execute_command` should be
-   listed. Approve each command request according to your normal review process.
+   listed alongside SSH/Ghidra tools. Ghidra tools require the separate backend
+   described below. Approve each command request according to your normal review process.
 
 The URL uses the debug machine's LAN address. For VS Code on the same machine, use
 the URL supplied by the app as-is; `localhost` may be used only if the client and
@@ -191,6 +219,97 @@ Set-Location mcp\wdbgmcp
 npm ci
 npm run build
 ```
+
+## Remote Ghidra prerequisites
+
+For the Ghidra MCP-backed PE analysis workflow, install the following manually on
+the **remote Windows machine running wdbgmcp**:
+
+- Ghidra at `C:\dbg\ghidra`.
+- A compatible 64-bit JDK for that Ghidra release.
+- A compatible Ghidra MCP extension/backend, installed and started by the user.
+
+The backend must be reachable from wdbgmcp on that machine; the current setup uses
+`http://127.0.0.1:8089`. This is the remote machine's loopback address, not the
+client's. Installation does not mean the backend is running: verify its endpoint
+and supported API/schema before sending analysis requests. Keep it loopback-only
+and configure backend authentication if available. Ghidra projects must not be
+opened concurrently by conflicting GUI/headless processes.
+
+Inputs must be readable and project/log/report directories writable by the
+analysis account. Prefer a separate low-privilege backend over parsing untrusted
+binaries as LocalSystem. Ghidra, Java, and the backend are not installed or started
+automatically by wdbgmcp. A client-side Ghidra MCP bridge is not needed if wdbgmcp
+calls the backend directly. SSH is optional and is not needed for loopback access.
+
+The normal Ghidra headless analyzer does not require an MCP extension, whereas
+the dedicated Ghidra tools use the HTTP backend's `/mcp/schema` contract.
+The client validates tool names, parameter types, and query/body placement against
+that live schema. Other backend variants may not support this contract; incompatible
+schemas/endpoints fail explicitly.
+
+### Using the Ghidra tools
+
+Start with `ghidra_status`, then `ghidra_list_tools` to discover capabilities.
+Always specify the full Ghidra program project path when the operation accepts
+`program`. Same-named binaries in different folders must not be selected by basename.
+For example, call `ghidra_search_strings` with:
+
+```json
+{
+  "program": "/old/client.exe",
+  "pattern": "error|exception",
+  "min_length": 4,
+  "offset": 0,
+  "limit": 100
+}
+```
+
+Searches apply a regex to defined/analyzed strings; they do not scan every possible
+raw-file string. No encoding filter is claimed because the installed backend's
+encoding field is only a label. Follow returned string addresses with
+`ghidra_xrefs`, then `ghidra_decompile` or `ghidra_disassemble`.
+Decompilation is inferred pseudocode, never recovered original C/C++; backend
+warnings and partial results are preserved.
+
+Use `ghidra_call_tool` with a tool name (without a leading slash) and its
+`parameters` object to access additional features:
+
+```json
+{
+  "tool": "get_function_hash",
+  "parameters": {
+    "program": "/old/client.exe",
+    "offset": 0,
+    "limit": 100
+  }
+}
+```
+
+Only backend-advertised non-destructive read-only tools are allowed through this
+generic entry point; arbitrary endpoints, scripts, edits, and saves are not exposed.
+`ghidra_import` is a separate opt-in mutation requiring `confirmed: true` and an
+absolute `file_path` on the backend machine. Backend file-root permissions still
+apply. Import responses do not guarantee analysis has finished.
+
+| Environment setting | Default |
+| --- | --- |
+| `WDBGMCP_GHIDRA_HOME` | `C:\dbg\ghidra` |
+| `WDBGMCP_GHIDRA_URL` | `http://127.0.0.1:8089` |
+| `WDBGMCP_GHIDRA_TOKEN` | Unset; optional bearer credential if supported by the backend |
+
+The backend URL must be a loopback HTTP(S) origin with no path, URL credentials,
+query, or fragment. Redirects are refused. Protect the optional token; it is not
+forwarded to commands launched by `execute_command`. Restart the server/service
+after changing its environment settings.
+
+Each backend HTTP request has a 60-second timeout and a 1 MiB response limit.
+Parameters are limited to 64 KiB; supplied pagination limits must be 1-500.
+Overlarge responses fail instead of appearing complete. Use offsets and smaller
+function/range queries. Cancelling or timing out an HTTP request does not guarantee
+backend work stops; inspect open programs/backend state before retrying imports.
+Persistent/resumable jobs, content-addressed import caching, full cross-version
+function matching, and downloadable report archives are not yet implemented.
 
 ## Run outside the desktop app
 

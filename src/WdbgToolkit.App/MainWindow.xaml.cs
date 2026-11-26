@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private IReadOnlyList<string> _selectedPrerequisiteToolIds = [];
     private bool _isBusy;
     private bool _mcpServerBusy;
+    private bool _sshSetupBusy;
     private string? _chocolateyInstallationMessage;
 
     public MainWindow()
@@ -397,6 +398,52 @@ public partial class MainWindow : Window
             StopMcpServerButton.IsEnabled = false;
             RemoveMcpServiceButton.IsEnabled = !_mcpServerBusy && McpServiceManager.IsAdministrator &&
                 RemoveMcpServiceButton.Visibility == Visibility.Visible;
+        }
+    }
+
+    private async void EnableSshButton_Click(object sender, RoutedEventArgs e) => await ConfigureSshAsync("install_enable");
+    private async void DisableSshButton_Click(object sender, RoutedEventArgs e) => await ConfigureSshAsync("disable");
+    private async void RefreshSshButton_Click(object sender, RoutedEventArgs e) => await ConfigureSshAsync("status");
+
+    private async Task ConfigureSshAsync(string action)
+    {
+        if (_sshSetupBusy) return;
+        var clients = SshAllowedClients.Text.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (action != "status")
+        {
+            if (!McpServiceManager.IsAdministrator)
+            {
+                SshSetupStatus.Text = "Run the toolkit as administrator to manage SSH. No changes were made.";
+                return;
+            }
+            if (action == "install_enable" && clients.Length == 0)
+            {
+                SshSetupStatus.Text = "Supply explicit allowed client IP addresses/CIDR subnets first.";
+                return;
+            }
+            var notice = action == "install_enable"
+                ? $"Install Windows OpenSSH Server if missing, enable automatic sshd startup, and allow inbound TCP 22 from: {string.Join(", ", clients)}? The Windows default OpenSSH firewall rule will be disabled and the toolkit rule replaced. Other rules and existing authentication remain unchanged. Review them separately. Windows may download the capability or require a manual reboot; setup failures may leave partial changes."
+                : "Stop sshd, disable its automatic startup, and disable the toolkit SSH firewall rule? This disconnects SSH users. SSH remains installed and other firewall rules are unchanged.";
+            if (MessageBox.Show(this, notice, "Confirm SSH configuration",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        }
+        _sshSetupBusy = true;
+        EnableSshButton.IsEnabled = DisableSshButton.IsEnabled = RefreshSshButton.IsEnabled = false;
+        SshSetupStatus.Text = "Checking/configuring SSH...";
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            var result = await SshSetup.RunAsync(_commandRunner, action, clients, action != "status", timeout.Token);
+            SshSetupStatus.Text = $"Exit code: {result.ExitCode}{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}{result.StandardError}";
+        }
+        catch (Exception exception)
+        {
+            SshSetupStatus.Text = $"SSH operation failed: {exception.Message}. Setup may have partially completed; check SSH status before retrying.";
+        }
+        finally
+        {
+            _sshSetupBusy = false;
+            EnableSshButton.IsEnabled = DisableSshButton.IsEnabled = RefreshSshButton.IsEnabled = true;
         }
     }
 

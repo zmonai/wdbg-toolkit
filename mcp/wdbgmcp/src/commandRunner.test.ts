@@ -22,18 +22,22 @@ test("reports spawn errors and invalid working directory", async () => {
 
 test("uses the requested working directory and removes the connection secret", async () => {
   const oldToken = process.env.WDBGMCP_TOKEN;
+  const oldGhidraToken = process.env.WDBGMCP_GHIDRA_TOKEN;
   process.env.WDBGMCP_TOKEN = "test-secret";
+  process.env.WDBGMCP_GHIDRA_TOKEN = "test-ghidra-secret";
   try {
     const result = await executeCommand({
       executable: process.execPath,
       workingDirectory: process.cwd(),
-      arguments: ["-e", "console.log(process.cwd()); console.log(process.env.WDBGMCP_TOKEN ?? 'no-token');"],
+      arguments: ["-e", "console.log(process.cwd()); console.log(process.env.WDBGMCP_TOKEN ?? 'no-token'); console.log(process.env.WDBGMCP_GHIDRA_TOKEN ?? 'no-ghidra-token');"],
     });
     assert.equal(result.exitCode, 0);
-    assert.equal(result.stdout.trim(), `${process.cwd()}\nno-token`);
+    assert.equal(result.stdout.trim(), `${process.cwd()}\nno-token\nno-ghidra-token`);
   } finally {
     if (oldToken === undefined) delete process.env.WDBGMCP_TOKEN;
     else process.env.WDBGMCP_TOKEN = oldToken;
+    if (oldGhidraToken === undefined) delete process.env.WDBGMCP_GHIDRA_TOKEN;
+    else process.env.WDBGMCP_GHIDRA_TOKEN = oldGhidraToken;
   }
 });
 
