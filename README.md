@@ -204,7 +204,7 @@ here requires the user-installed Ghidra MCP backend.
 
 ### Optional SSH remote access
 
-The MCP Server panel offers **Install and enable SSH**, **Disable SSH**, and **SSH
+The MCP Server panel offers **Enable SSH**, **Disable SSH**, and **SSH
 status**. This is separate from automatic prerequisite installation: neither MCP
 nor headless Ghidra requires SSH. Run the toolkit as administrator and supply
 explicit comma-separated client IP addresses/CIDRs before confirming enablement.
