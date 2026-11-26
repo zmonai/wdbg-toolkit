@@ -48,6 +48,7 @@ export async function executeCommand(input: CommandInput, signal?: AbortSignal):
       // Do not pass the HTTP credential to AI-launched commands.
       const environment = { ...process.env };
       delete environment.WDBGMCP_TOKEN;
+      delete environment.WDBGMCP_GHIDRA_TOKEN;
       const child = spawn(options.executable, options.arguments, {
         cwd: options.workingDirectory,
         env: environment,

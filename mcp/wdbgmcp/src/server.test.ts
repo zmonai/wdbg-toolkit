@@ -68,7 +68,11 @@ test("HTTP authenticates requests and serves AI command output to multiple clien
       const client = new Client({ name: "integration-test", version: "1" });
       clients.push(client);
       await client.connect(new StreamableHTTPClientTransport(url, { requestInit: { headers } }));
-      assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), ["execute_command"]);
+      assert.deepEqual((await client.listTools()).tools.map((tool) => tool.name), [
+        "execute_command", "configure_windows_ssh", "ghidra_status", "ghidra_list_tools",
+        "ghidra_call_tool", "ghidra_search_strings", "ghidra_list_items", "ghidra_decompile",
+        "ghidra_disassemble", "ghidra_xrefs", "ghidra_import",
+      ]);
       const result = await client.callTool({
         name: "execute_command",
         arguments: { executable: process.execPath, arguments: ["-e", "console.log('AI can analyse this output');"] },

@@ -6,6 +6,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { commandInput, executeCommand } from "./commandRunner.js";
+import { configureSsh, sshInput } from "./sshSetup.js";
+import { registerGhidraTools } from "./ghidraTools.js";
 
 /** Default TCP port for the HTTP (Streamable HTTP) transport. Override with WDBGMCP_PORT. */
 const DEFAULT_PORT = 7890;
@@ -45,6 +47,28 @@ export function createMcpServer(): McpServer {
     },
   );
 
+  server.registerTool(
+    "configure_windows_ssh",
+    {
+      title: "Inspect or explicitly install and enable Windows SSH",
+      description: "Optional remote access setup, not a requirement for MCP/Ghidra. status is read-only. install_enable requires administrator privileges, confirmed=true, and allowedClients IP/CIDR scopes. Uses the Windows OpenSSH Server capability or an existing sshd installation, enables automatic startup, creates a toolkit TCP 22 rule, and disables the Windows default OpenSSH-Server-In-TCP rule. Other firewall rules and authentication settings are unchanged. disable stops sshd, disables startup and the toolkit rule; it does not uninstall SSH. Installation may partially complete, time out, require reboot, or fail when Windows capability sources are unavailable; inspect status before retrying.",
+      inputSchema: sshInput,
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+    },
+    async (input, extra) => {
+      try {
+        const result = await configureSsh(input, extra.signal);
+        return {
+          isError: result.exitCode !== 0 || result.timedOut || result.outputLimitExceeded || result.cancelled || !!result.error,
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          structuredContent: { ...result },
+        };
+      } catch (error) {
+        return { isError: true, content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }] };
+      }
+    },
+  );
+  registerGhidraTools(server);
   return server;
 }
 

@@ -113,8 +113,9 @@ For crash analysis, ProcDump is installed through Chocolatey because there is no
 
 Selecting the **MCP Server** scenario shows an **MCP Server** panel with **Start server** / **Stop server** buttons and a read-only, copyable **connection details** box. The app resolves `mcp/wdbgmcp/dist/index.js` alongside the installed app, or from the repository in a development build. **Start server** launches it with `node`, listening over HTTP (the MCP Streamable HTTP transport) bound to all network interfaces on port 7890 by default. The connection details box shows ready-to-paste config snippets pointing at `http://<this-machine's-LAN-IP>:7890/mcp` with the required authentication header. The machine's firewall must allow inbound connections on that port for a remote client to connect.
 
-The server exposes one MCP tool, `execute_command`, which runs a requested program
-and returns its output and exit status. Starting it requires confirmation. All
+The server exposes `execute_command` for command execution, optional
+`configure_windows_ssh` setup, and dedicated Ghidra discovery/analysis tools.
+Starting it requires confirmation. All
 HTTP requests require the bearer token included in the connection snippets; copy
 new details after relaunching the app and keep the token private.
 
@@ -157,6 +158,78 @@ Removing and reinstalling generates a new token; update your MCP client configur
 MSI uninstall (including major upgrades) also stops/removes the service and deletes
 its saved token; service mode must be explicitly enabled again after an upgrade.
 The host's LAN IP may change after reboot; use a stable address/DNS name if needed.
+
+Service setup displays its current step beside the MCP controls and reports failures
+in a dialog. **Refresh status** only reads registration/state; it does not install
+the service and does not clear the last operation error. Service-controller commands
+time out after 30 seconds; check registration before retrying a timed-out setup.
+
+### Remote Ghidra analysis requirements
+
+For Ghidra-assisted PE analysis and version comparison, the user must install
+Ghidra on the remote debugging machine at `C:\dbg\ghidra`, together with a compatible
+64-bit JDK and a compatible Ghidra MCP extension/backend. These are user-managed
+requirements; the toolkit does not install Ghidra, its extension, or Java.
+The Ghidra MCP backend must be running on that same machine and reachable by
+wdbgmcp over loopback (the current setup uses `http://127.0.0.1:8089`).
+Loopback refers to the debugging machine, not the AI client's machine.
+
+The backend account needs read access to both PE files and write access to its
+project, log, and report directories. Use a low-privilege analysis account where
+possible. Keep the backend off public interfaces and configure any authentication
+supported by the installed backend. A client-side Ghidra MCP bridge is distinct
+from the remote extension/backend and is not required when wdbgmcp invokes the
+remote backend directly.
+
+The server provides `ghidra_status`, `ghidra_list_tools`, `ghidra_search_strings`,
+`ghidra_list_items`, `ghidra_decompile`, `ghidra_disassemble`, `ghidra_xrefs`, and
+explicitly confirmed `ghidra_import`. `ghidra_call_tool` accesses other
+non-destructive read-only capabilities advertised by the backend, including
+function hashes, instruction/byte searches, and symbol/memory inspection. Always
+specify the full program project path, such as `/old/client.exe`, to distinguish
+same-named versions. Results preserve backend warnings; decompilation is inferred
+pseudocode, not original source.
+
+`WDBGMCP_GHIDRA_HOME` overrides `C:\dbg\ghidra`; `WDBGMCP_GHIDRA_URL` overrides the
+default loopback origin `http://127.0.0.1:8089`. Only loopback HTTP(S) origins are
+accepted, without redirects. If the backend supports bearer authentication,
+configure `WDBGMCP_GHIDRA_TOKEN`; keep it private. Changes to environment settings
+require restarting the server/service. Dedicated tools validate parameters against
+the backend's `/mcp/schema` contract and fail explicitly if incompatible.
+
+Responses are bounded to 1 MiB, individual HTTP requests to 60 seconds, and
+pagination to 500 entries. Timeouts/cancellation stop the client request, not
+necessarily the backend analysis; inspect backend state before retrying imports.
+Automatic backend startup, persistent analysis jobs, content-addressed imports,
+complete PE/function comparison, and downloadable report archives are not yet
+built in.
+SSH is not required for this loopback workflow. The standard Ghidra headless
+analyzer can run without the MCP extension, but the HTTP-backed workflow described
+here requires the user-installed Ghidra MCP backend.
+
+### Optional SSH remote access
+
+The MCP Server panel offers **Enable SSH**, **Disable SSH**, and **SSH
+status**. This is separate from automatic prerequisite installation: neither MCP
+nor headless Ghidra requires SSH. Run the toolkit as administrator and supply
+explicit comma-separated client IP addresses/CIDRs before confirming enablement.
+No network scope is preselected.
+
+Setup reuses an existing `sshd` service or installs the Windows OpenSSH Server
+capability, enables automatic startup, and creates `WdbgToolkit-SSH-In` for TCP 22
+from the selected clients. It disables the known Windows default
+`OpenSSH-Server-In-TCP` rule; unrelated firewall rules and existing SSH
+authentication settings are unchanged and must be reviewed separately. No passwords
+or keys are provisioned. Windows capability installation may need an available
+Windows Update/servicing source or a manual reboot; failures are reported without
+automatically downloading an alternate MSI.
+
+**Disable SSH** stops sshd (disconnecting users), disables startup and the toolkit
+firewall rule, but leaves SSH installed. MSI uninstall does not undo optional SSH
+configuration; disable it explicitly if no longer needed. The dedicated
+`configure_windows_ssh` MCP tool exposes the same operations, requiring explicit
+owner confirmation and client scopes for enablement. Setup is bounded to five
+minutes; errors/timeouts can leave partial changes, so inspect status before retrying.
 
 ## Product direction
 

@@ -62,11 +62,13 @@ public static class McpServiceManager
         return settings;
     }
 
-    public static async Task InstallAndStartAsync(string? entryPoint)
+    public static async Task InstallAndStartAsync(string? entryPoint, Action<string>? reportProgress = null)
     {
         RequireAdministrator();
+        reportProgress?.Invoke("Checking Windows service registration...");
         if (GetStatus() is not null)
         {
+            reportProgress?.Invoke("Starting the registered Windows service...");
             await StartAsync();
             return;
         }
@@ -78,6 +80,7 @@ public static class McpServiceManager
         var executable = Environment.ProcessPath ??
             throw new InvalidOperationException("Could not locate the toolkit executable.");
         var node = FindMachineNode();
+        reportProgress?.Invoke("Checking machine-wide toolkit and Node.js paths...");
         // LocalSystem must never execute a user-writable development build or per-user Node installation.
         RequireProgramFilesPath(executable);
         RequireProgramFilesPath(entryPoint);
@@ -102,6 +105,7 @@ public static class McpServiceManager
             throw new InvalidOperationException(
                 $"Service data already exists at {SettingsDirectory}. Remove the old service data as administrator before installing.");
         }
+        reportProgress?.Invoke("Creating protected service configuration...");
         FileSystemAclExtensions.CreateDirectory(security, SettingsDirectory);
         var settings = new McpServiceSettings(Path.GetFullPath(entryPoint), node,
             McpServerManager.DefaultPort, Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
@@ -109,16 +113,18 @@ public static class McpServiceManager
         try
         {
             await File.WriteAllTextAsync(SettingsPath, JsonSerializer.Serialize(settings));
+            reportProgress?.Invoke("Registering WdbgToolkitMcp with Windows Service Control Manager...");
             await RunScAsync("create", ServiceName, "binPath=", BuildServiceCommand(executable),
                 "start=", "auto", "obj=", "LocalSystem", "DisplayName=", "Windows Debug Toolkit MCP");
             created = true;
+            reportProgress?.Invoke("Configuring service description and recovery...");
             await RunScAsync("description", ServiceName,
                 "Authenticated MCP command execution as LocalSystem. Starts automatically after reboot.");
             await RunScAsync("failure", ServiceName, "reset=", "86400", "actions=", "restart/5000/restart/15000/restart/60000");
         }
         catch
         {
-            if (!created)
+            if (!created && GetStatus() is null)
             {
                 File.Delete(SettingsPath);
                 Directory.Delete(SettingsDirectory);
@@ -126,6 +132,7 @@ public static class McpServiceManager
             throw;
         }
 
+        reportProgress?.Invoke("Starting the Windows service and verifying its authenticated endpoint...");
         await StartAsync();
     }
 
@@ -230,7 +237,21 @@ public static class McpServiceManager
         using var process = Process.Start(info) ?? throw new InvalidOperationException("Could not launch the service controller.");
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException exception) when (timeout.IsCancellationRequested)
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            throw new InvalidOperationException(
+                $"Windows service operation '{args[0]}' timed out after 30 seconds. Check the service status before retrying; registration may have partially completed.",
+                exception);
+        }
         var output = await stdout;
         var error = await stderr;
         if (process.ExitCode != 0)
