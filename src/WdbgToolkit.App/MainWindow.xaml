@@ -395,12 +395,6 @@
                             <StackPanel>
                                 <TextBlock Text="MCP SERVER"
                                            Style="{StaticResource SectionLabel}" />
-                                <TextBlock x:Name="McpServerStatus"
-                                           Margin="0,8,0,0"
-                                           Foreground="{StaticResource MutedBrush}"
-                                           FontSize="11"
-                                           LineHeight="16"
-                                           TextWrapping="Wrap" />
                                 <GroupBox Header="Optional requirement: SSH remote access" Margin="0,12,0,0">
                                     <StackPanel Margin="8">
                                         <TextBlock Text="Not required for MCP or Ghidra. Administrator-only setup opens TCP 22 to supplied clients and starts sshd automatically after reboot. Existing SSH authentication and other firewall rules are unchanged."
@@ -425,6 +419,12 @@
                                     <TextBlock Text="Run as a Windows service (admin only; starts after reboot and keeps running when this app closes)"
                                                TextWrapping="Wrap" />
                                 </CheckBox>
+                                <TextBlock x:Name="McpServerStatus"
+                                           Margin="0,8,0,0"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           FontSize="11"
+                                           LineHeight="16"
+                                           TextWrapping="Wrap" />
                                 <WrapPanel Margin="0,12,0,0">
                                     <Button x:Name="StartMcpServerButton"
                                             Content="Start server"
@@ -461,7 +461,8 @@
                                             Padding="14,8"
                                             Visibility="Collapsed"
                                             Click="RemoveMcpServiceButton_Click" />
-                                    <Button Content="Refresh status"
+                                    <Button x:Name="RefreshMcpStatusButton"
+                                            Content="Refresh status"
                                             Margin="10,0,0,0"
                                             Padding="14,8"
                                             Click="RefreshMcpStatusButton_Click" />

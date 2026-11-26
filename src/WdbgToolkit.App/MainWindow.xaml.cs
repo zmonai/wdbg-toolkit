@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private bool _isBusy;
     private bool _mcpServerBusy;
     private bool _sshSetupBusy;
+    private string? _mcpOperationError;
     private string? _chocolateyInstallationMessage;
 
     public MainWindow()
@@ -399,6 +400,11 @@ public partial class MainWindow : Window
             RemoveMcpServiceButton.IsEnabled = !_mcpServerBusy && McpServiceManager.IsAdministrator &&
                 RemoveMcpServiceButton.Visibility == Visibility.Visible;
         }
+        if (_mcpOperationError is not null)
+        {
+            McpServerStatus.Text += $"{Environment.NewLine}{Environment.NewLine}Last operation failed: {_mcpOperationError}";
+        }
+        RefreshMcpStatusButton.IsEnabled = !_mcpServerBusy;
     }
 
     private async void EnableSshButton_Click(object sender, RoutedEventArgs e) => await ConfigureSshAsync("install_enable");
@@ -509,7 +515,9 @@ public partial class MainWindow : Window
         }
         else
         {
-            McpServerStatus.Text = "Stopped. Start this server first, then copy its verified connection details into your MCP client. Details from another toolkit instance will use a different token.";
+            McpServerStatus.Text = RunMcpAsServiceCheckBox.IsChecked == true
+                ? "Windows service is not installed. Choose Start as admin and approve the service confirmation to register WdbgToolkitMcp. Refresh status only checks registration; it does not install the service."
+                : "Stopped. Start this server first, then copy its verified connection details into your MCP client. Details from another toolkit instance will use a different token.";
             StartMcpServerButton.IsEnabled = !_mcpServerBusy && RunMcpAsServiceCheckBox.IsChecked != true;
             StopMcpServerButton.IsEnabled = false;
         }
@@ -566,11 +574,15 @@ public partial class MainWindow : Window
         }
         catch (Win32Exception exception) when (exception.NativeErrorCode == 1223)
         {
-            McpServerStatus.Text = "Administrator startup cancelled. Windows UAC approval was not granted.";
+            _mcpOperationError = "Administrator startup cancelled. Windows UAC approval was not granted.";
+            RefreshMcpServerUi();
         }
         catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
         {
-            McpServerStatus.Text = $"Could not start the toolkit as administrator: {exception.Message}";
+            _mcpOperationError = $"Could not start the toolkit as administrator: {exception.Message}";
+            RefreshMcpServerUi();
+            MessageBox.Show(this, _mcpOperationError, "MCP administrator startup failed",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -601,18 +613,20 @@ public partial class MainWindow : Window
         }
 
         _mcpServerBusy = true;
+        _mcpOperationError = null;
         McpServerStatus.Text = "Starting wdbgmcp...";
         StartMcpServerButton.IsEnabled = false;
         StartMcpServerAsAdminButton.IsEnabled = false;
         StopMcpServerButton.IsEnabled = false;
         RunMcpAsServiceCheckBox.IsEnabled = false;
         RemoveMcpServiceButton.IsEnabled = false;
-        string? startupError = null;
+        RefreshMcpStatusButton.IsEnabled = false;
         try
         {
             if (asService)
             {
-                await McpServiceManager.InstallAndStartAsync(entryPoint);
+                await McpServiceManager.InstallAndStartAsync(entryPoint,
+                    progress => McpServerStatus.Text = progress);
             }
             else
             {
@@ -625,7 +639,11 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            startupError = $"Could not start wdbgmcp: {exception.Message}";
+            _mcpOperationError = $"Could not start {(asService ? "the MCP Windows service" : "wdbgmcp")}: {exception.Message}";
+            if (exception.InnerException is not null)
+            {
+                _mcpOperationError += $"{Environment.NewLine}{exception.InnerException.Message}";
+            }
         }
         finally
         {
@@ -633,9 +651,10 @@ public partial class MainWindow : Window
         }
 
         RefreshMcpServerUi();
-        if (startupError is not null)
+        if (_mcpOperationError is not null)
         {
-            McpServerStatus.Text = startupError;
+            MessageBox.Show(this, _mcpOperationError, asService ? "MCP service setup failed" : "MCP startup failed",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -647,12 +666,13 @@ public partial class MainWindow : Window
         }
 
         _mcpServerBusy = true;
+        _mcpOperationError = null;
         McpServerStatus.Text = "Stopping wdbgmcp...";
         StartMcpServerButton.IsEnabled = false;
         StopMcpServerButton.IsEnabled = false;
         StartMcpServerAsAdminButton.IsEnabled = false;
         RemoveMcpServiceButton.IsEnabled = false;
-        string? stopError = null;
+        RefreshMcpStatusButton.IsEnabled = false;
         try
         {
             if (McpServiceManager.GetStatus() is not null)
@@ -666,7 +686,7 @@ public partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            stopError = $"Could not stop wdbgmcp cleanly: {exception.Message}";
+            _mcpOperationError = $"Could not stop wdbgmcp cleanly: {exception.Message}";
         }
         finally
         {
@@ -674,10 +694,6 @@ public partial class MainWindow : Window
         }
 
         RefreshMcpServerUi();
-        if (stopError is not null)
-        {
-            McpServerStatus.Text = stopError;
-        }
     }
 
     private void RefreshMcpStatusButton_Click(object sender, RoutedEventArgs e)
@@ -697,25 +713,21 @@ public partial class MainWindow : Window
             return;
         }
         _mcpServerBusy = true;
+        _mcpOperationError = null;
         RefreshMcpServerUi();
-        string? error = null;
         try
         {
             await McpServiceManager.RemoveAsync();
         }
         catch (Exception exception)
         {
-            error = $"Could not remove the MCP service: {exception.Message}";
+            _mcpOperationError = $"Could not remove the MCP service: {exception.Message}";
         }
         finally
         {
             _mcpServerBusy = false;
         }
         RefreshMcpServerUi();
-        if (error is not null)
-        {
-            McpServerStatus.Text = error;
-        }
     }
 
     private void McpServerManager_Exited(object? sender, EventArgs e)

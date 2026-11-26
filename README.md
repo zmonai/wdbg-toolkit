@@ -159,6 +159,11 @@ MSI uninstall (including major upgrades) also stops/removes the service and dele
 its saved token; service mode must be explicitly enabled again after an upgrade.
 The host's LAN IP may change after reboot; use a stable address/DNS name if needed.
 
+Service setup displays its current step beside the MCP controls and reports failures
+in a dialog. **Refresh status** only reads registration/state; it does not install
+the service and does not clear the last operation error. Service-controller commands
+time out after 30 seconds; check registration before retrying a timed-out setup.
+
 ### Remote Ghidra analysis requirements
 
 For Ghidra-assisted PE analysis and version comparison, the user must install
