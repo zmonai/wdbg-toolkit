@@ -17,7 +17,7 @@ const toolSchema = z.object({
   destructive: z.boolean().default(false),
   params: z.array(parameterSchema).max(128),
 });
-const catalogSchema = z.object({ tools: z.array(toolSchema).max(2000) });
+const catalogSchema = z.object({ tools: z.array(z.unknown()).max(2000) });
 export type GhidraTool = z.infer<typeof toolSchema>;
 export type GhidraParameters = Record<string, unknown>;
 
@@ -114,10 +114,17 @@ export class GhidraClient {
   async catalog(signal?: AbortSignal): Promise<GhidraTool[]> {
     const response = await this.request("/mcp/schema", "GET", new URLSearchParams(), undefined, signal);
     const parsed = catalogSchema.safeParse(response);
-    if (!parsed.success) {
+    // Entries this client cannot call safely (e.g. nested /server/... paths) are skipped, not fatal.
+    const tools = parsed.success
+      ? parsed.data.tools.flatMap((entry) => {
+        const tool = toolSchema.safeParse(entry);
+        return tool.success ? [tool.data] : [];
+      })
+      : [];
+    if (tools.length === 0) {
       throw new Error("Unsupported Ghidra backend schema. Install a compatible backend exposing /mcp/schema with path/method/read_only/params.");
     }
-    return parsed.data.tools;
+    return tools;
   }
 
   async call(toolName: string, input: GhidraParameters, signal?: AbortSignal, confirmedImport = false): Promise<unknown> {
